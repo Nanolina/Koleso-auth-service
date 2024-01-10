@@ -13,6 +13,6 @@ export class RegisterDto {
   password: string;
 
   @IsString()
-  @MinLength(6)
+  @MinLength(8)
   repeatedPassword: string;
 }
