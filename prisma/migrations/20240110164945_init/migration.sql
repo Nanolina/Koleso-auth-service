@@ -5,6 +5,8 @@ CREATE TABLE "User" (
     "phone" VARCHAR(20) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT false,
     "password" TEXT NOT NULL,
+    "failedAttempts" INTEGER NOT NULL DEFAULT 0,
+    "lastFailedAttempt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
