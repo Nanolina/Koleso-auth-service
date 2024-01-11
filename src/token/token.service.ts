@@ -23,44 +23,26 @@ export class TokenService {
     return bcrypt.compare(externalData, dataDB);
   }
 
-  async createRefreshToken(userId: string, refreshToken: string) {
-    const hashedToken = await this.hashData(refreshToken);
-
-    await this.prisma.token.create({
-      data: {
-        token: hashedToken,
-        userId,
-        expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
-      },
-    });
-  }
-
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await this.hashData(refreshToken);
 
-    // Find token
-    const token = await this.prisma.token.findFirst({
-      where: {
-        userId,
-      },
-    });
-
-    if (!token) {
-      throw new ForbiddenException('Token not found');
-    }
-
     try {
-      await this.prisma.token.update({
+      await this.prisma.token.upsert({
         where: {
-          id: token.id,
+          userId,
         },
-        data: {
+        create: {
+          token: hashedToken,
+          expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
+          userId,
+        },
+        update: {
           token: hashedToken,
           expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
         },
       });
     } catch (error) {
-      throw new JsonWebTokenError('Failed to update the refresh token');
+      throw new JsonWebTokenError('Failed to update the refresh token', error);
     }
   }
 
@@ -92,5 +74,36 @@ export class TokenService {
     };
   }
 
-  async refreshTokens() {}
+  async refreshTokens(userId: string, refreshToken: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      throw new ForbiddenException('User not found by his ID');
+    }
+
+    const token = await this.prisma.token.findFirst({
+      where: {
+        userId,
+      },
+    });
+
+    const refreshTokenMatches = await this.verifyHashedData(
+      refreshToken,
+      token.token,
+    );
+
+    if (!refreshTokenMatches) {
+      throw new ForbiddenException("The tokens don't match");
+    }
+
+    const tokens = await this.getTokens(user.id);
+
+    await this.updateRefreshToken(user.id, tokens.refresh_token);
+
+    return tokens;
+  }
 }

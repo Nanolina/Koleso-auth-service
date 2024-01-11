@@ -41,6 +41,9 @@ CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Token_userId_key" ON "Token"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Token_token_key" ON "Token"("token");
 
 -- AddForeignKey
