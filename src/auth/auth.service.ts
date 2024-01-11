@@ -92,5 +92,17 @@ export class AuthService {
     return tokens;
   }
 
-  async logout() {}
+  async logout(userId: string) {
+    await this.prisma.token.updateMany({
+      where: {
+        userId,
+        token: {
+          not: null,
+        },
+      },
+      data: {
+        token: null,
+      },
+    });
+  }
 }

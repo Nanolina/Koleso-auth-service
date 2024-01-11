@@ -1,4 +1,14 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignUpDto } from './dto';
@@ -12,21 +22,28 @@ export class AuthController {
   ) {}
 
   @Post('/signup')
+  @HttpCode(HttpStatus.CREATED)
   signup(@Body() dto: SignUpDto): Promise<Tokens> {
     return this.authService.signUp(dto);
   }
 
   @Post('/login')
+  @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto): Promise<Tokens> {
     return this.authService.login(dto);
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Post('/logout')
-  logout() {
-    return this.authService.logout();
+  @HttpCode(HttpStatus.OK)
+  logout(@Req() req: Request) {
+    const user = req.user;
+    return this.authService.logout(user.sub);
   }
 
+  @UseGuards(AuthGuard('jwt-refresh'))
   @Post('/refresh')
+  @HttpCode(HttpStatus.OK)
   refreshTokens() {
     return this.tokenService.refreshTokens();
   }
