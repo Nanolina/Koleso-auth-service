@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { Tokens } from '../auth/types';
@@ -17,6 +17,10 @@ export class TokenService {
 
   hashData(data: any) {
     return bcrypt.hash(data, 10);
+  }
+
+  verifyHashedData(externalData, dataDB) {
+    return bcrypt.compare(externalData, dataDB);
   }
 
   async createRefreshToken(userId: string, refreshToken: string) {
@@ -45,15 +49,19 @@ export class TokenService {
       throw new ForbiddenException('Token not found');
     }
 
-    await this.prisma.token.update({
-      where: {
-        id: token.id,
-      },
-      data: {
-        token: hashedToken,
-        expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
-      },
-    });
+    try {
+      await this.prisma.token.update({
+        where: {
+          id: token.id,
+        },
+        data: {
+          token: hashedToken,
+          expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
+        },
+      });
+    } catch (error) {
+      throw new JsonWebTokenError('Failed to update the refresh token');
+    }
   }
 
   async getTokens(userId: string): Promise<Tokens> {

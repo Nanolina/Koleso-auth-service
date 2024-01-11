@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
-import { SignUpDto } from './dto';
+import { LoginDto, SignUpDto } from './dto';
 import { Tokens } from './types';
 
 dotenv.config();
@@ -42,6 +42,55 @@ export class AuthService {
     return tokens;
   }
 
-  async login() {}
+  async login(dto: LoginDto): Promise<Tokens> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: dto.email,
+      },
+    });
+
+    if (!user) {
+      throw new ForbiddenException('User not found');
+    }
+
+    const passwordMatches = await this.tokenService.verifyHashedData(
+      dto.password,
+      user.password,
+    );
+
+    if (!passwordMatches) {
+      await this.prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          failedAttempts: {
+            increment: 1,
+          },
+          lastFailedAttempt: new Date(),
+        },
+      });
+
+      if (user.failedAttempts >= 5) {
+        await this.prisma.user.update({
+          where: {
+            id: user.id,
+          },
+          data: {
+            isActive: false,
+          },
+        });
+      }
+
+      throw new ForbiddenException('Invalid password');
+    }
+
+    const tokens = await this.tokenService.getTokens(user.id);
+
+    await this.tokenService.updateRefreshToken(user.id, tokens.refresh_token);
+
+    return tokens;
+  }
+
   async logout() {}
 }
