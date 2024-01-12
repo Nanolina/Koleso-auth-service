@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
@@ -19,6 +20,7 @@ export class AuthService {
   ) {}
 
   async signUp(dto: SignUpDto): Promise<Tokens> {
+    // Get data from dto
     const { password, repeatedPassword, email, phone } = dto;
 
     // Password comparison
@@ -27,8 +29,9 @@ export class AuthService {
     }
 
     // Hash the password
-    const hashedPassword = await this.tokenService.hashData(password);
+    const hashedPassword = await this.hashPassword(password);
 
+    // Create new user
     const newUser = await this.prisma.user.create({
       data: {
         email,
@@ -37,16 +40,20 @@ export class AuthService {
       },
     });
 
-    const tokens = await this.tokenService.getTokens(newUser.id);
+    // Create new tokens
+    const tokens = await this.tokenService.createTokens(newUser.id);
 
+    // Update refresh_token in the DB
     await this.tokenService.updateRefreshToken(
       newUser.id,
       tokens.refresh_token,
     );
+
     return tokens;
   }
 
   async login(dto: LoginDto): Promise<Tokens> {
+    // Find user by email
     const user = await this.prisma.user.findFirst({
       where: {
         email: dto.email,
@@ -57,46 +64,35 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
-    const passwordMatches = await this.tokenService.verifyHashedData(
+    // Verify password
+    const passwordMatches = await this.verifyPassword(
       dto.password,
       user.password,
     );
 
+    // Increase failed attempts
     if (!passwordMatches) {
-      await this.prisma.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          failedAttempts: {
-            increment: 1,
-          },
-          lastFailedAttempt: new Date(),
-        },
-      });
+      const failedAttempts = user.failedAttempts + 1;
+      await this.updateFailedAttempts(user.id, failedAttempts);
 
-      if (user.failedAttempts >= 5) {
-        await this.prisma.user.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            isActive: false,
-          },
-        });
+      if (failedAttempts >= 5) {
+        await this.deactivateUser(user.id);
       }
 
       throw new ForbiddenException('Invalid password');
     }
 
-    const tokens = await this.tokenService.getTokens(user.id);
+    // Create new tokens
+    const tokens = await this.tokenService.createTokens(user.id);
 
+    // Update refresh_token in the DB
     await this.tokenService.updateRefreshToken(user.id, tokens.refresh_token);
 
     return tokens;
   }
 
   async logout(userId: string) {
+    // Set token to null for user
     await this.prisma.token.updateMany({
       where: {
         userId,
@@ -107,6 +103,32 @@ export class AuthService {
       data: {
         token: null,
       },
+    });
+  }
+
+  async hashPassword(password: string) {
+    const rounds = parseInt(process.env.BCRYPT_ROUNDS, 10);
+    return bcrypt.hash(password, rounds);
+  }
+
+  async verifyPassword(password, hashedPassword) {
+    return bcrypt.compare(password, hashedPassword);
+  }
+
+  async updateFailedAttempts(userId: string, attempts: number) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        failedAttempts: attempts,
+        lastFailedAttempt: new Date(),
+      },
+    });
+  }
+
+  async deactivateUser(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false },
     });
   }
 }

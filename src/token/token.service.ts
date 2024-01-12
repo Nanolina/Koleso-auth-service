@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
 import * as dotenv from 'dotenv';
 import { Tokens } from '../auth/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,18 +20,20 @@ export class TokenService {
     private jwtService: JwtService,
   ) {}
 
-  hashData(data: any) {
-    return bcrypt.hash(data, 10);
+  hashToken(token: string) {
+    return createHash('sha256').update(token).digest('hex');
   }
 
-  verifyHashedData(externalData, dataDB) {
-    return bcrypt.compare(externalData, dataDB);
+  verifyToken(token, hashedToken) {
+    return this.hashToken(token) === hashedToken;
   }
 
   async updateRefreshToken(userId: string, refreshToken: string) {
-    const hashedToken = await this.hashData(refreshToken);
+    // Hash token
+    const hashedToken = await this.hashToken(refreshToken);
 
     try {
+      // Update refresh_token in the DB
       await this.prisma.token.upsert({
         where: {
           userId,
@@ -51,7 +53,7 @@ export class TokenService {
     }
   }
 
-  async getTokens(userId: string): Promise<Tokens> {
+  async createTokens(userId: string): Promise<Tokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
         {
@@ -80,6 +82,7 @@ export class TokenService {
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
+    // Find user by his ID
     const user = await this.prisma.user.findFirst({
       where: {
         id: userId,
@@ -90,6 +93,7 @@ export class TokenService {
       throw new NotFoundException('User not found by his ID');
     }
 
+    // Find token by user ID
     const token = await this.prisma.token.findFirst({
       where: {
         userId,
@@ -104,7 +108,8 @@ export class TokenService {
       throw new UnauthorizedException('Token is null');
     }
 
-    const refreshTokenMatches = await this.verifyHashedData(
+    // Verify refresh token
+    const refreshTokenMatches = await this.verifyToken(
       refreshToken,
       token.token,
     );
@@ -113,8 +118,10 @@ export class TokenService {
       throw new ForbiddenException("The tokens don't match");
     }
 
-    const tokens = await this.getTokens(user.id);
+    // Create new tokens
+    const tokens = await this.createTokens(user.id);
 
+    // Update refresh token in the DB
     await this.updateRefreshToken(user.id, tokens.refresh_token);
 
     return tokens;
