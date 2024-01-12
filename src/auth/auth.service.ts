@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -9,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { LoginDto, SignUpDto } from './dto';
 import { Tokens } from './types';
+import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
@@ -31,11 +33,15 @@ export class AuthService {
     // Hash the password
     const hashedPassword = await this.hashPassword(password);
 
+    // Create a UUID for a future activation link
+    const activationLink = uuidv4();
+
     // Create new user
     const newUser = await this.prisma.user.create({
       data: {
         email,
         phone,
+        activationLink,
         password: hashedPassword,
       },
     });
@@ -43,11 +49,8 @@ export class AuthService {
     // Create new tokens
     const tokens = await this.tokenService.createTokens(newUser.id);
 
-    // Update refresh_token in the DB
-    await this.tokenService.updateRefreshToken(
-      newUser.id,
-      tokens.refresh_token,
-    );
+    // Update refreshToken in the DB
+    await this.tokenService.updateRefreshToken(newUser.id, tokens.refreshToken);
 
     return tokens;
   }
@@ -85,8 +88,8 @@ export class AuthService {
     // Create new tokens
     const tokens = await this.tokenService.createTokens(user.id);
 
-    // Update refresh_token in the DB
-    await this.tokenService.updateRefreshToken(user.id, tokens.refresh_token);
+    // Update refreshToken in the DB
+    await this.tokenService.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
   }
@@ -121,6 +124,27 @@ export class AuthService {
       data: {
         failedAttempts: attempts,
         lastFailedAttempt: new Date(),
+      },
+    });
+  }
+
+  async activateUser(activationLink: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        activationLink,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Incorrect activation link');
+    }
+
+    await this.prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        isActive: true,
       },
     });
   }

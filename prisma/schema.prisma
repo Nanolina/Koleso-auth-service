@@ -13,6 +13,7 @@ model User {
   email             String    @unique
   phone             String    @unique @db.VarChar(20)
   isActive          Boolean   @default(false)
+  activationLink    String?
   password          String
   failedAttempts    Int       @default(0)
   lastFailedAttempt DateTime?

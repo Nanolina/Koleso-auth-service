@@ -32,8 +32,8 @@ export class TokenService {
     // Hash token
     const hashedToken = await this.hashToken(refreshToken);
 
+    // Update refreshToken in the DB
     try {
-      // Update refresh_token in the DB
       await this.prisma.token.upsert({
         where: {
           userId,
@@ -76,8 +76,8 @@ export class TokenService {
     ]);
 
     return {
-      access_token: accessToken,
-      refresh_token: refreshToken,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
     };
   }
 
@@ -122,7 +122,7 @@ export class TokenService {
     const tokens = await this.createTokens(user.id);
 
     // Update refresh token in the DB
-    await this.updateRefreshToken(user.id, tokens.refresh_token);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
   }

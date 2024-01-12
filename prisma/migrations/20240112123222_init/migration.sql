@@ -4,6 +4,7 @@ CREATE TABLE "User" (
     "email" TEXT NOT NULL,
     "phone" VARCHAR(20) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "activationLink" TEXT,
     "password" TEXT NOT NULL,
     "failedAttempts" INTEGER NOT NULL DEFAULT 0,
     "lastFailedAttempt" TIMESTAMP(3),
