@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotImplementedException,
   Param,
   Post,
   Req,
@@ -17,7 +18,6 @@ import { RtGuard } from '../common/guards';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignUpDto } from './dto';
-import { Tokens } from './types';
 
 dotenv.config();
 
@@ -47,21 +47,41 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return res.send({ message: 'User created successfully' });
+    return res.send(tokens);
   }
 
   @Public()
   @Post('/login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto): Promise<Tokens> {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Res() res: Response): Promise<Response> {
+    const tokens = await this.authService.login(dto);
+
+    // Send cookie
+    const cookieExpiresInterval = parseInt(process.env.COOKIE_EXPIRES, 10);
+
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      expires: new Date(Date.now() + cookieExpiresInterval),
+      // secure: true,
+      sameSite: 'strict',
+    });
+
+    return res.send(tokens);
   }
 
   @Post('/logout')
   @HttpCode(HttpStatus.OK)
-  async logout(@Req() req: Request) {
-    const user = req.user;
-    return this.authService.logout(user.sub);
+  async logout(@Req() req: Request, @Res() res: Response) {
+    const { refreshToken } = req.cookies;
+    const { id } = req.user;
+
+    if (!refreshToken || !id) {
+      throw new NotImplementedException('Failed to log out');
+    }
+
+    await this.authService.logout(refreshToken, id);
+    res.clearCookie('refreshToken');
+    return res.send({ message: 'User loged out successfully' });
   }
 
   @Public()
@@ -70,7 +90,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async refreshTokens(@Req() req: Request) {
     const user = req.user;
-    return this.tokenService.refreshTokens(user.sub, user.refreshToken);
+    return this.tokenService.refreshTokens(user.id, user.refreshToken);
   }
 
   @Public()

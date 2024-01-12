@@ -1,16 +1,17 @@
 import {
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
+  NotImplementedException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { LoginDto, SignUpDto } from './dto';
 import { Tokens } from './types';
-import { v4 as uuidv4 } from 'uuid';
 
 dotenv.config();
 
@@ -37,14 +38,25 @@ export class AuthService {
     const activationLink = uuidv4();
 
     // Create new user
-    const newUser = await this.prisma.user.create({
-      data: {
-        email,
-        phone,
-        activationLink,
-        password: hashedPassword,
-      },
-    });
+    let newUser;
+    try {
+      newUser = await this.prisma.user.create({
+        data: {
+          email,
+          phone,
+          activationLink,
+          password: hashedPassword,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new NotImplementedException(
+            'A user with the same phone number or email already exists',
+          );
+        }
+      }
+    }
 
     // Create new tokens
     const tokens = await this.tokenService.createTokens(newUser.id);
@@ -94,19 +106,8 @@ export class AuthService {
     return tokens;
   }
 
-  async logout(userId: string) {
-    // Set token to null for user
-    await this.prisma.token.updateMany({
-      where: {
-        userId,
-        token: {
-          not: null,
-        },
-      },
-      data: {
-        token: null,
-      },
-    });
+  async logout(refreshToken: string, userId: string) {
+    await this.tokenService.removeToken(refreshToken, userId);
   }
 
   async hashPassword(password: string) {

@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  NotImplementedException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
@@ -57,7 +58,7 @@ export class TokenService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
         {
-          sub: userId,
+          id: userId,
         },
         {
           secret: process.env.JWT_ACCESS_SECRET,
@@ -66,7 +67,7 @@ export class TokenService {
       ),
       this.jwtService.signAsync(
         {
-          sub: userId,
+          id: userId,
         },
         {
           secret: process.env.JWT_REFRESH_SECRET,
@@ -125,5 +126,39 @@ export class TokenService {
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
+  }
+
+  async removeToken(refreshToken: string, userId: string) {
+    // Find token by user ID
+    const tokenData = await this.prisma.token.findFirst({
+      where: {
+        userId,
+      },
+    });
+
+    if (!tokenData) {
+      throw new NotFoundException('Failed to find the token when deleting it');
+    }
+
+    // Verify refresh token
+    const refreshTokenMatches = await this.verifyToken(
+      refreshToken,
+      tokenData.token,
+    );
+
+    if (!refreshTokenMatches) {
+      throw new ForbiddenException("The tokens don't match");
+    }
+
+    // Delete token by user ID
+    try {
+      await this.prisma.token.delete({
+        where: {
+          userId,
+        },
+      });
+    } catch (error) {
+      throw new NotImplementedException('Failed to delete the token', error);
+    }
   }
 }
