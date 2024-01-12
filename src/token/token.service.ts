@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
@@ -82,7 +87,7 @@ export class TokenService {
     });
 
     if (!user) {
-      throw new ForbiddenException('User not found by his ID');
+      throw new NotFoundException('User not found by his ID');
     }
 
     const token = await this.prisma.token.findFirst({
@@ -90,6 +95,14 @@ export class TokenService {
         userId,
       },
     });
+
+    if (!token) {
+      throw new NotFoundException('Token not found by userId');
+    }
+
+    if (!token.token) {
+      throw new UnauthorizedException('Token is null');
+    }
 
     const refreshTokenMatches = await this.verifyHashedData(
       refreshToken,

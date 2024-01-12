@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
@@ -50,7 +54,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new ForbiddenException('User not found');
+      throw new NotFoundException('User not found');
     }
 
     const passwordMatches = await this.tokenService.verifyHashedData(
