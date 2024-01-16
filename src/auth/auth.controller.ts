@@ -9,6 +9,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import * as dotenv from 'dotenv';
@@ -38,7 +39,10 @@ export class AuthController {
     const tokens = await this.authService.signUp(dto);
 
     // Send cookie
-    const cookieExpiresInterval = parseInt(process.env.COOKIE_EXPIRES, 10);
+    const cookieExpiresInterval = parseInt(
+      process.env.COOKIE_EXPIRES_INTERVAL,
+      10,
+    );
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
@@ -57,7 +61,10 @@ export class AuthController {
     const tokens = await this.authService.login(dto);
 
     // Send cookie
-    const cookieExpiresInterval = parseInt(process.env.COOKIE_EXPIRES, 10);
+    const cookieExpiresInterval = parseInt(
+      process.env.COOKIE_EXPIRES_INTERVAL,
+      10,
+    );
 
     res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
@@ -84,13 +91,35 @@ export class AuthController {
     return res.send({ message: 'User loged out successfully' });
   }
 
+  // Send the refresh_token in Authorization
   @Public()
   @UseGuards(RtGuard)
   @Get('/refresh')
   @HttpCode(HttpStatus.OK)
-  async refreshTokens(@Req() req: Request) {
-    const user = req.user;
-    return this.tokenService.refreshTokens(user.id, user.refreshToken);
+  async refreshTokens(@Req() req: Request, @Res() res: Response) {
+    const { refreshToken } = req.cookies;
+    const { id } = req.user;
+
+    if (!refreshToken || !id) {
+      throw new UnauthorizedException('Not enough data to update the token');
+    }
+
+    const tokenData = await this.tokenService.refreshTokens(id, refreshToken);
+
+    // Send cookie
+    const cookieExpiresInterval = parseInt(
+      process.env.COOKIE_EXPIRES_INTERVAL,
+      10,
+    );
+
+    res.cookie('refreshToken', tokenData.refreshToken, {
+      httpOnly: true,
+      expires: new Date(Date.now() + cookieExpiresInterval),
+      // secure: true,
+      sameSite: 'strict',
+    });
+
+    return res.send(tokenData);
   }
 
   @Public()

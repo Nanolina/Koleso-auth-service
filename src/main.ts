@@ -14,6 +14,7 @@ async function bootstrap() {
   app.use(
     cors({
       origin: process.env.SELLER_INTERFACE_URL,
+      credentials: true,
     }),
   );
 

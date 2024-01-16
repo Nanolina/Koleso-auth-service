@@ -25,8 +25,46 @@ export class TokenService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  verifyToken(token, hashedToken) {
-    return this.hashToken(token) === hashedToken;
+  async isRefreshTokenMatches(token, hashedToken) {
+    const refreshTokenMatches = (await this.hashToken(token)) === hashedToken;
+
+    if (!refreshTokenMatches) {
+      throw new ForbiddenException("The tokens don't match");
+    }
+
+    return true;
+  }
+
+  async validateRefreshToken(token: string) {
+    try {
+      return this.jwtService.verifyAsync(token, {
+        secret: process.env.JWT_REFRESH_SECRET,
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async findToken(userId: string, refreshToken: string) {
+    // Find token by user ID
+    const tokenData = await this.prisma.token.findFirst({
+      where: {
+        userId,
+      },
+    });
+
+    if (!tokenData) {
+      throw new NotFoundException('Token not found by userId');
+    }
+
+    if (!tokenData.token) {
+      throw new UnauthorizedException('Token is null');
+    }
+
+    // Check if JWT refresh token in the cookie and in the database are equal
+    await this.isRefreshTokenMatches(refreshToken, tokenData.token);
+
+    return tokenData;
   }
 
   async updateRefreshToken(userId: string, refreshToken: string) {
@@ -83,72 +121,27 @@ export class TokenService {
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
-    // Find user by his ID
-    const user = await this.prisma.user.findFirst({
-      where: {
-        id: userId,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('User not found by his ID');
-    }
+    const userData = await this.validateRefreshToken(refreshToken);
 
     // Find token by user ID
-    const token = await this.prisma.token.findFirst({
-      where: {
-        userId,
-      },
-    });
+    const tokenFromDB = await this.findToken(userId, refreshToken);
 
-    if (!token) {
-      throw new NotFoundException('Token not found by userId');
-    }
-
-    if (!token.token) {
-      throw new UnauthorizedException('Token is null');
-    }
-
-    // Verify refresh token
-    const refreshTokenMatches = await this.verifyToken(
-      refreshToken,
-      token.token,
-    );
-
-    if (!refreshTokenMatches) {
-      throw new ForbiddenException("The tokens don't match");
+    if (!userData || !tokenFromDB) {
+      throw new UnauthorizedException('Failed to refresh the token');
     }
 
     // Create new tokens
-    const tokens = await this.createTokens(user.id);
+    const tokens = await this.createTokens(userId);
 
     // Update refresh token in the DB
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    await this.updateRefreshToken(userId, tokens.refreshToken);
 
     return tokens;
   }
 
   async removeToken(refreshToken: string, userId: string) {
     // Find token by user ID
-    const tokenData = await this.prisma.token.findFirst({
-      where: {
-        userId,
-      },
-    });
-
-    if (!tokenData) {
-      throw new NotFoundException('Failed to find the token when deleting it');
-    }
-
-    // Verify refresh token
-    const refreshTokenMatches = await this.verifyToken(
-      refreshToken,
-      tokenData.token,
-    );
-
-    if (!refreshTokenMatches) {
-      throw new ForbiddenException("The tokens don't match");
-    }
+    await this.findToken(userId, refreshToken);
 
     // Delete token by user ID
     try {

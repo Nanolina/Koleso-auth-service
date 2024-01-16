@@ -97,6 +97,9 @@ export class AuthService {
       throw new ForbiddenException('Invalid password');
     }
 
+    // Reset all invalid attempts to 0 in case of a successful login
+    await this.resetFailedAttempts(user.id);
+
     // Create new tokens
     const tokens = await this.tokenService.createTokens(user.id);
 
@@ -140,20 +143,42 @@ export class AuthService {
       throw new NotFoundException('Incorrect activation link');
     }
 
-    await this.prisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
-        isActive: true,
-      },
-    });
+    try {
+      await this.prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      throw new NotImplementedException('Failed to activate user', error);
+    }
   }
 
   async deactivateUser(userId: string) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { isActive: false },
-    });
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isActive: false },
+      });
+    } catch (error) {
+      throw new NotImplementedException('Failed to deactivate user', error);
+    }
+  }
+
+  async resetFailedAttempts(userId: string) {
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { failedAttempts: 0 },
+      });
+    } catch (error) {
+      throw new NotImplementedException(
+        'Failed to reset all invalid attempts to 0 on login',
+        error,
+      );
+    }
   }
 }
