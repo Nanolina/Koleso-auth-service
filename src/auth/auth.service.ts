@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { LoginDto, SignUpDto } from './dto';
-import { Tokens } from './types';
+import { AuthResponse, UserData } from './types';
 
 dotenv.config();
 
@@ -22,7 +22,7 @@ export class AuthService {
     private tokenService: TokenService,
   ) {}
 
-  async signUp(dto: SignUpDto): Promise<Tokens> {
+  async signUp(dto: SignUpDto): Promise<AuthResponse> {
     // Get data from dto
     const { password, repeatedPassword, email, phone } = dto;
 
@@ -64,10 +64,15 @@ export class AuthService {
     // Update refreshToken in the DB
     await this.tokenService.updateRefreshToken(newUser.id, tokens.refreshToken);
 
-    return tokens;
+    const userData: UserData = {
+      id: newUser.id,
+      isActive: newUser.isActive,
+    };
+
+    return { tokens, user: userData };
   }
 
-  async login(dto: LoginDto): Promise<Tokens> {
+  async login(dto: LoginDto): Promise<AuthResponse> {
     // Find user by email
     const user = await this.prisma.user.findFirst({
       where: {
@@ -106,7 +111,15 @@ export class AuthService {
     // Update refreshToken in the DB
     await this.tokenService.updateRefreshToken(user.id, tokens.refreshToken);
 
-    return tokens;
+    const userData: UserData = {
+      id: user.id,
+      isActive: user.isActive,
+    };
+
+    return {
+      tokens,
+      user: userData,
+    };
   }
 
   async logout(refreshToken: string, userId: string) {

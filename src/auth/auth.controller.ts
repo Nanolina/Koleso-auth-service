@@ -36,7 +36,7 @@ export class AuthController {
     @Body() dto: SignUpDto,
     @Res() res: Response,
   ): Promise<Response> {
-    const tokens = await this.authService.signUp(dto);
+    const { tokens, user } = await this.authService.signUp(dto);
 
     // Send cookie
     const cookieExpiresInterval = parseInt(
@@ -51,14 +51,14 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return res.send(tokens);
+    return res.send({ token: tokens.accessToken, user });
   }
 
   @Public()
   @Post('/login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Res() res: Response): Promise<Response> {
-    const tokens = await this.authService.login(dto);
+    const { tokens, user } = await this.authService.login(dto);
 
     // Send cookie
     const cookieExpiresInterval = parseInt(
@@ -73,7 +73,10 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return res.send(tokens);
+    return res.send({
+      token: tokens.accessToken,
+      user,
+    });
   }
 
   @Post('/logout')
@@ -91,7 +94,7 @@ export class AuthController {
     return res.send({ message: 'User loged out successfully' });
   }
 
-  // Send the refresh_token in Authorization
+  // Send the refresh_token in Authorization or remove RtGuard
   @Public()
   @UseGuards(RtGuard)
   @Get('/refresh')
@@ -104,7 +107,7 @@ export class AuthController {
       throw new UnauthorizedException('Not enough data to update the token');
     }
 
-    const tokenData = await this.tokenService.refreshTokens(id, refreshToken);
+    const tokens = await this.tokenService.refreshTokens(id, refreshToken);
 
     // Send cookie
     const cookieExpiresInterval = parseInt(
@@ -112,14 +115,14 @@ export class AuthController {
       10,
     );
 
-    res.cookie('refreshToken', tokenData.refreshToken, {
+    res.cookie('refreshToken', tokens.refreshToken, {
       httpOnly: true,
       expires: new Date(Date.now() + cookieExpiresInterval),
       // secure: true,
       sameSite: 'strict',
     });
 
-    return res.send(tokenData);
+    return res.send({ token: tokens.accessToken });
   }
 
   @Public()
