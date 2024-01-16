@@ -18,7 +18,7 @@ import { Public } from '../common/decorators';
 import { RtGuard } from '../common/guards';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
-import { LoginDto, SignUpDto } from './dto';
+import { LoginDto, SignupDto } from './dto';
 
 dotenv.config();
 
@@ -33,10 +33,10 @@ export class AuthController {
   @Post('/signup')
   @HttpCode(HttpStatus.CREATED)
   async signup(
-    @Body() dto: SignUpDto,
+    @Body() dto: SignupDto,
     @Res() res: Response,
   ): Promise<Response> {
-    const { tokens, user } = await this.authService.signUp(dto);
+    const { tokens, user } = await this.authService.signup(dto);
 
     // Send cookie
     const cookieExpiresInterval = parseInt(
@@ -91,7 +91,7 @@ export class AuthController {
 
     await this.authService.logout(refreshToken, id);
     res.clearCookie('refreshToken');
-    return res.send({ message: 'User loged out successfully' });
+    return res.sendStatus(200);
   }
 
   // Send the refresh_token in Authorization or remove RtGuard

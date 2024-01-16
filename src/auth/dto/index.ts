@@ -1,2 +1,2 @@
 export { LoginDto } from './login.dto';
-export { SignUpDto } from './signup.dto';
+export { SignupDto } from './signup.dto';

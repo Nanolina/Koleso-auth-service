@@ -10,7 +10,7 @@ import * as dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
-import { LoginDto, SignUpDto } from './dto';
+import { LoginDto, SignupDto } from './dto';
 import { AuthResponse, UserData } from './types';
 
 dotenv.config();
@@ -22,7 +22,7 @@ export class AuthService {
     private tokenService: TokenService,
   ) {}
 
-  async signUp(dto: SignUpDto): Promise<AuthResponse> {
+  async signup(dto: SignupDto): Promise<AuthResponse> {
     // Get data from dto
     const { password, repeatedPassword, email, phone } = dto;
 
