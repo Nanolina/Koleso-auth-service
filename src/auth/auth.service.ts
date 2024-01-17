@@ -4,22 +4,21 @@ import {
   NotFoundException,
   NotImplementedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import * as dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { LoginDto, SignupDto } from './dto';
-import { AuthResponse, UserData } from './types';
-
-dotenv.config();
+import { AuthResponse, Tokens, UserData } from './types';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private tokenService: TokenService,
+    private configService: ConfigService,
   ) {}
 
   async signup(dto: SignupDto): Promise<AuthResponse> {
@@ -59,10 +58,7 @@ export class AuthService {
     }
 
     // Create new tokens
-    const tokens = await this.tokenService.createTokens(newUser.id);
-
-    // Update refreshToken in the DB
-    await this.tokenService.updateRefreshToken(newUser.id, tokens.refreshToken);
+    const tokens = await this.createTokensInTokenService(newUser.id);
 
     const userData: UserData = {
       id: newUser.id,
@@ -84,6 +80,8 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    const userId: string = user.id;
+
     // Verify password
     const passwordMatches = await this.verifyPassword(
       dto.password,
@@ -93,26 +91,23 @@ export class AuthService {
     // Increase failed attempts
     if (!passwordMatches) {
       const failedAttempts = user.failedAttempts + 1;
-      await this.updateFailedAttempts(user.id, failedAttempts);
+      await this.updateFailedAttempts(userId, failedAttempts);
 
       if (failedAttempts >= 5) {
-        await this.deactivateUser(user.id);
+        await this.deactivateUser(userId);
       }
 
       throw new ForbiddenException('Invalid password');
     }
 
     // Reset all invalid attempts to 0 in case of a successful login
-    await this.resetFailedAttempts(user.id);
+    await this.resetFailedAttempts(userId);
 
     // Create new tokens
-    const tokens = await this.tokenService.createTokens(user.id);
-
-    // Update refreshToken in the DB
-    await this.tokenService.updateRefreshToken(user.id, tokens.refreshToken);
+    const tokens = await this.createTokensInTokenService(userId);
 
     const userData: UserData = {
-      id: user.id,
+      id: userId,
       isActive: user.isActive,
     };
 
@@ -122,12 +117,13 @@ export class AuthService {
     };
   }
 
-  async logout(refreshToken: string, userId: string) {
-    await this.tokenService.removeToken(refreshToken, userId);
+  async logout(userId: string) {
+    await this.tokenService.removeToken(userId);
   }
 
   async hashPassword(password: string) {
-    const rounds = parseInt(process.env.BCRYPT_ROUNDS, 10);
+    const bcryptRounds = this.configService.get<string>('BCRYPT_ROUNDS');
+    const rounds = parseInt(bcryptRounds, 10);
     return bcrypt.hash(password, rounds);
   }
 
@@ -193,5 +189,11 @@ export class AuthService {
         error,
       );
     }
+  }
+
+  private async createTokensInTokenService(userId: string): Promise<Tokens> {
+    const tokens = await this.tokenService.createTokens(userId);
+    await this.tokenService.updateRefreshToken(userId, tokens.refreshToken);
+    return tokens;
   }
 }

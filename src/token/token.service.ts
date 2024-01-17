@@ -4,72 +4,66 @@ import {
   NotImplementedException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
-import * as dotenv from 'dotenv';
 import { Tokens, UserData } from '../auth';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateEndDate } from './functions';
 import { JWTInfo } from './types';
-
-dotenv.config();
 
 @Injectable()
 export class TokenService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  async isRefreshTokenMatches(token, hashedToken) {
-    const result: boolean = (await this.hashToken(token)) === hashedToken;
-    return result;
+  // Check if refresh token in the cookie and in the database are equal
+  private isRefreshTokenMatches(token, hashedToken) {
+    return this.hashToken(token) === hashedToken;
   }
 
   async validateRefreshToken(token: string) {
     try {
       return this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_REFRESH_SECRET,
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch (error) {
       return null;
     }
   }
 
-  async findToken(userId: string, refreshToken: string) {
+  async findToken(userId: string) {
     // Find token by user ID
-    const tokenData = await this.prisma.token.findFirst({
+    const tokenFromDB = await this.prisma.token.findFirst({
       where: {
         userId,
       },
     });
 
-    if (!tokenData || !tokenData.token) {
+    if (!tokenFromDB || !tokenFromDB.token) {
       throw new NotFoundException(
         'Token data not found by userId or token is empty',
       );
     }
 
-    // Check if JWT refresh token in the cookie and in the database are equal
-    const isTokenMatches = await this.isRefreshTokenMatches(
-      refreshToken,
-      tokenData.token,
-    );
-
-    if (!isTokenMatches) {
-      throw new UnauthorizedException('The tokens do not match');
-    }
-
-    return tokenData;
+    return tokenFromDB;
   }
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     // Hash token
     const hashedToken = await this.hashToken(refreshToken);
+
+    // CONFIG
+    const refreshExpires = this.configService.get<string>(
+      'JWT_REFRESH_EXPIRES_IN',
+    );
 
     // Update refreshToken in the DB
     try {
@@ -79,12 +73,12 @@ export class TokenService {
         },
         create: {
           token: hashedToken,
-          expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
+          expiresAt: calculateEndDate(refreshExpires),
           userId,
         },
         update: {
           token: hashedToken,
-          expiresAt: calculateEndDate(process.env.JWT_REFRESH_EXPIRES_IN),
+          expiresAt: calculateEndDate(refreshExpires),
         },
       });
     } catch (error) {
@@ -93,14 +87,29 @@ export class TokenService {
   }
 
   async createTokens(userId: string): Promise<Tokens> {
+    // CONFIG
+    // Access
+    const accessTokenSecret =
+      this.configService.get<string>('JWT_ACCESS_SECRET');
+    const accessTokenExpires = this.configService.get<string>(
+      'JWT_ACCESS_EXPIRES_IN',
+    );
+
+    // Refresh
+    const refreshTokenSecret =
+      this.configService.get<string>('JWT_REFRESH_SECRET');
+    const refreshTokenExpires = this.configService.get<string>(
+      'JWT_REFRESH_EXPIRES_IN',
+    );
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
         {
           id: userId,
         },
         {
-          secret: process.env.JWT_ACCESS_SECRET,
-          expiresIn: process.env.JWT_ACCESS_EXPIRES_IN,
+          secret: accessTokenSecret,
+          expiresIn: accessTokenExpires,
         },
       ),
       this.jwtService.signAsync(
@@ -108,8 +117,8 @@ export class TokenService {
           id: userId,
         },
         {
-          secret: process.env.JWT_REFRESH_SECRET,
-          expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
+          secret: refreshTokenSecret,
+          expiresIn: refreshTokenExpires,
         },
       ),
     ]);
@@ -137,9 +146,14 @@ export class TokenService {
     const userId: string = user.id;
 
     // Check if this user has this token in the DB
-    const tokenFromDB = await this.findToken(userId, refreshToken);
+    const tokenFromDB = await this.findToken(userId);
 
-    if (!tokenFromDB) {
+    const areTokensMatch = await this.isRefreshTokenMatches(
+      refreshToken,
+      tokenFromDB.token,
+    );
+
+    if (!tokenFromDB || !areTokensMatch) {
       throw new UnauthorizedException('Something went wrong with the refresh');
     }
 
@@ -157,11 +171,7 @@ export class TokenService {
     return { tokens, user: userData };
   }
 
-  async removeToken(refreshToken: string, userId: string) {
-    // Find token by user ID
-    await this.findToken(userId, refreshToken);
-
-    // Delete token by user ID
+  async removeToken(userId: string) {
     try {
       await this.prisma.token.delete({
         where: {

@@ -4,28 +4,41 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  NotImplementedException,
+  NotFoundException,
   Param,
   Post,
   Req,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import * as dotenv from 'dotenv';
+import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { Public } from '../common/decorators';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto';
 
-dotenv.config();
-
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private tokenService: TokenService,
+    private configService: ConfigService,
   ) {}
+
+  private setRefreshTokenCookie(res: Response, refreshToken: string) {
+    const cookieExpiresInterval = parseInt(
+      this.configService.get<string>('COOKIE_EXPIRES_INTERVAL'),
+      10,
+    );
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      expires: new Date(Date.now() + cookieExpiresInterval),
+      // secure: true,
+      sameSite: 'strict',
+    });
+  }
 
   @Public()
   @Post('/signup')
@@ -35,19 +48,7 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<Response> {
     const { tokens, user } = await this.authService.signup(dto);
-
-    // Send cookie
-    const cookieExpiresInterval = parseInt(
-      process.env.COOKIE_EXPIRES_INTERVAL,
-      10,
-    );
-
-    res.cookie('refreshToken', tokens.refreshToken, {
-      httpOnly: true,
-      expires: new Date(Date.now() + cookieExpiresInterval),
-      // secure: true,
-      sameSite: 'strict',
-    });
+    await this.setRefreshTokenCookie(res, tokens.refreshToken);
 
     return res.send({ user, token: tokens.accessToken });
   }
@@ -57,19 +58,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto, @Res() res: Response): Promise<Response> {
     const { tokens, user } = await this.authService.login(dto);
-
-    // Send cookie
-    const cookieExpiresInterval = parseInt(
-      process.env.COOKIE_EXPIRES_INTERVAL,
-      10,
-    );
-
-    res.cookie('refreshToken', tokens.refreshToken, {
-      httpOnly: true,
-      expires: new Date(Date.now() + cookieExpiresInterval),
-      // secure: true,
-      sameSite: 'strict',
-    });
+    await this.setRefreshTokenCookie(res, tokens.refreshToken);
 
     return res.send({
       user,
@@ -80,15 +69,15 @@ export class AuthController {
   @Post('/logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res() res: Response) {
-    const { refreshToken } = req.cookies;
     const { id } = req.user;
 
-    if (!refreshToken || !id) {
-      throw new NotImplementedException('Failed to log out');
+    if (!id) {
+      throw new NotFoundException('Not found user ID');
     }
 
-    await this.authService.logout(refreshToken, id);
+    await this.authService.logout(id);
     res.clearCookie('refreshToken');
+
     return res.sendStatus(200);
   }
 
@@ -96,27 +85,19 @@ export class AuthController {
   @Get('/refresh')
   @HttpCode(HttpStatus.OK)
   async refreshTokens(@Req() req: Request, @Res() res: Response) {
+    // Get refresh token from cookies
     const { refreshToken } = req.cookies;
 
     if (!refreshToken) {
       throw new UnauthorizedException('The token has not been transferred');
     }
 
+    // Get new tokens and user data
     const { tokens, user } =
       await this.tokenService.refreshTokens(refreshToken);
 
-    // Send cookie
-    const cookieExpiresInterval = parseInt(
-      process.env.COOKIE_EXPIRES_INTERVAL,
-      10,
-    );
-
-    res.cookie('refreshToken', tokens.refreshToken, {
-      httpOnly: true,
-      expires: new Date(Date.now() + cookieExpiresInterval),
-      // secure: true,
-      sameSite: 'strict',
-    });
+    // Set cookies
+    await this.setRefreshTokenCookie(res, tokens.refreshToken);
 
     return res.send({
       user,
