@@ -9,18 +9,20 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  phone             String    @unique @db.VarChar(20)
-  isActive          Boolean   @default(false)
-  activationLink    String?
-  password          String
-  failedAttempts    Int       @default(0)
-  lastFailedAttempt DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now())
-  sessions          Session[]
-  token             Token?
+  id               String    @id @default(uuid())
+  email            String    @unique
+  phone            String    @unique @db.VarChar(20)
+  isActive         Boolean   @default(true)
+  deactivationDate DateTime?
+  activationLink   String?
+  password         String
+  failedAttempts   Int       @default(0)
+  isVerifiedEmail  Boolean   @default(false)
+  isVerifiedPhone  Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now())
+  sessions         Session[]
+  token            Token?
 }
 
 model Session {

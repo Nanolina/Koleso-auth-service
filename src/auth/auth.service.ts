@@ -93,6 +93,7 @@ export class AuthService {
       const failedAttempts = user.failedAttempts + 1;
       await this.updateFailedAttempts(userId, failedAttempts);
 
+      // Deactivate user
       if (failedAttempts >= 5) {
         await this.deactivateUser(userId);
       }
@@ -136,26 +137,15 @@ export class AuthService {
       where: { id: userId },
       data: {
         failedAttempts: attempts,
-        lastFailedAttempt: new Date(),
       },
     });
   }
 
-  async activateUser(activationLink: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        activationLink,
-      },
-    });
-
-    if (!user) {
-      throw new NotFoundException('Incorrect activation link');
-    }
-
+  async activateUser(userId: string) {
     try {
       await this.prisma.user.update({
         where: {
-          id: user.id,
+          id: userId,
         },
         data: {
           isActive: true,
@@ -169,8 +159,13 @@ export class AuthService {
   async deactivateUser(userId: string) {
     try {
       await this.prisma.user.update({
-        where: { id: userId },
-        data: { isActive: false },
+        where: {
+          id: userId,
+        },
+        data: {
+          isActive: false,
+          deactivationDate: new Date(),
+        },
       });
     } catch (error) {
       throw new NotImplementedException('Failed to deactivate user', error);
@@ -180,8 +175,12 @@ export class AuthService {
   async resetFailedAttempts(userId: string) {
     try {
       await this.prisma.user.update({
-        where: { id: userId },
-        data: { failedAttempts: 0 },
+        where: {
+          id: userId,
+        },
+        data: {
+          failedAttempts: 0,
+        },
       });
     } catch (error) {
       throw new NotImplementedException(
