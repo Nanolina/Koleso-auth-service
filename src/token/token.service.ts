@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   Injectable,
   NotFoundException,
   NotImplementedException,
@@ -8,9 +7,10 @@ import {
 import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import * as dotenv from 'dotenv';
-import { Tokens } from '../auth/types';
+import { Tokens, UserData } from '../auth';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateEndDate } from './functions';
+import { JWTInfo } from './types';
 
 dotenv.config();
 
@@ -26,13 +26,8 @@ export class TokenService {
   }
 
   async isRefreshTokenMatches(token, hashedToken) {
-    const refreshTokenMatches = (await this.hashToken(token)) === hashedToken;
-
-    if (!refreshTokenMatches) {
-      throw new ForbiddenException("The tokens don't match");
-    }
-
-    return true;
+    const result: boolean = (await this.hashToken(token)) === hashedToken;
+    return result;
   }
 
   async validateRefreshToken(token: string) {
@@ -53,16 +48,21 @@ export class TokenService {
       },
     });
 
-    if (!tokenData) {
-      throw new NotFoundException('Token not found by userId');
-    }
-
-    if (!tokenData.token) {
-      throw new UnauthorizedException('Token is null');
+    if (!tokenData || !tokenData.token) {
+      throw new NotFoundException(
+        'Token data not found by userId or token is empty',
+      );
     }
 
     // Check if JWT refresh token in the cookie and in the database are equal
-    await this.isRefreshTokenMatches(refreshToken, tokenData.token);
+    const isTokenMatches = await this.isRefreshTokenMatches(
+      refreshToken,
+      tokenData.token,
+    );
+
+    if (!isTokenMatches) {
+      throw new UnauthorizedException('The tokens do not match');
+    }
 
     return tokenData;
   }
@@ -120,14 +120,27 @@ export class TokenService {
     };
   }
 
-  async refreshTokens(userId: string, refreshToken: string) {
-    const userData = await this.validateRefreshToken(refreshToken);
+  async refreshTokens(refreshToken: string) {
+    const tokenInfo: JWTInfo = await this.validateRefreshToken(refreshToken);
 
-    // Find token by user ID
+    // Find user by his ID
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: tokenInfo.id || '',
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found when refresh');
+    }
+
+    const userId: string = user.id;
+
+    // Check if this user has this token in the DB
     const tokenFromDB = await this.findToken(userId, refreshToken);
 
-    if (!userData || !tokenFromDB) {
-      throw new UnauthorizedException('Failed to refresh the token');
+    if (!tokenFromDB) {
+      throw new UnauthorizedException('Something went wrong with the refresh');
     }
 
     // Create new tokens
@@ -136,7 +149,12 @@ export class TokenService {
     // Update refresh token in the DB
     await this.updateRefreshToken(userId, tokens.refreshToken);
 
-    return tokens;
+    const userData: UserData = {
+      id: userId,
+      isActive: user.isActive,
+    };
+
+    return { tokens, user: userData };
   }
 
   async removeToken(refreshToken: string, userId: string) {

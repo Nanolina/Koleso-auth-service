@@ -10,12 +10,10 @@ import {
   Req,
   Res,
   UnauthorizedException,
-  UseGuards,
 } from '@nestjs/common';
 import * as dotenv from 'dotenv';
 import { Request, Response } from 'express';
 import { Public } from '../common/decorators';
-import { RtGuard } from '../common/guards';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto';
@@ -51,7 +49,7 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return res.send({ token: tokens.accessToken, user });
+    return res.send({ user, token: tokens.accessToken });
   }
 
   @Public()
@@ -74,8 +72,8 @@ export class AuthController {
     });
 
     return res.send({
-      token: tokens.accessToken,
       user,
+      token: tokens.accessToken,
     });
   }
 
@@ -94,20 +92,18 @@ export class AuthController {
     return res.sendStatus(200);
   }
 
-  // Send the refresh_token in Authorization or remove RtGuard
   @Public()
-  @UseGuards(RtGuard)
   @Get('/refresh')
   @HttpCode(HttpStatus.OK)
   async refreshTokens(@Req() req: Request, @Res() res: Response) {
     const { refreshToken } = req.cookies;
-    const { id } = req.user;
 
-    if (!refreshToken || !id) {
-      throw new UnauthorizedException('Not enough data to update the token');
+    if (!refreshToken) {
+      throw new UnauthorizedException('The token has not been transferred');
     }
 
-    const tokens = await this.tokenService.refreshTokens(id, refreshToken);
+    const { tokens, user } =
+      await this.tokenService.refreshTokens(refreshToken);
 
     // Send cookie
     const cookieExpiresInterval = parseInt(
@@ -122,7 +118,10 @@ export class AuthController {
       sameSite: 'strict',
     });
 
-    return res.send({ token: tokens.accessToken });
+    return res.send({
+      user,
+      token: tokens.accessToken,
+    });
   }
 
   @Public()
