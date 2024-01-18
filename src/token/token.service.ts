@@ -31,7 +31,7 @@ export class TokenService {
 
   async validateRefreshToken(token: string) {
     try {
-      return this.jwtService.verifyAsync(token, {
+      return await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch (error) {
@@ -131,6 +131,10 @@ export class TokenService {
 
   async refreshTokens(refreshToken: string) {
     const tokenInfo: JWTInfo = await this.validateRefreshToken(refreshToken);
+
+    if (!tokenInfo) {
+      throw new UnauthorizedException('Token is not valid or time has expired');
+    }
 
     // Find user by his ID
     const user = await this.prisma.user.findFirst({
