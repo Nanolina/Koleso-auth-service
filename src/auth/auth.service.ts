@@ -1,13 +1,15 @@
 import {
-  ForbiddenException,
+  BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
-  NotImplementedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY, convertToNumber } from '../common';
+import { LoggerError } from '../common/logger';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { LoginDto, SignupDto } from './dto';
@@ -21,13 +23,17 @@ export class AuthService {
     private configService: ConfigService,
   ) {}
 
+  private readonly logger = new LoggerError(AuthService.name);
+
   async signup(dto: SignupDto): Promise<AuthResponse> {
     // Get data from dto
     const { password, repeatedPassword, email, phone } = dto;
 
     // Password comparison
     if (password !== repeatedPassword) {
-      throw new Error('Passwords do not match');
+      this.logger.error({ method: 'signup', error: 'Passwords do not match' });
+
+      throw new BadRequestException('Passwords do not match');
     }
 
     // Hash the password
@@ -50,11 +56,22 @@ export class AuthService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          throw new NotImplementedException(
+          this.logger.error({
+            method: 'signup',
+            error: 'A user with the same phone number or email already exists',
+          });
+
+          throw new BadRequestException(
             'A user with the same phone number or email already exists',
           );
         }
       }
+
+      this.logger.error({ method: 'signup', error });
+
+      throw new InternalServerErrorException(
+        'Something went wrong, please check the data',
+      );
     }
 
     // Create new tokens
@@ -65,7 +82,10 @@ export class AuthService {
       isActive: newUser.isActive,
     };
 
-    return { tokens, user: userData };
+    return {
+      tokens,
+      user: userData,
+    };
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
@@ -77,7 +97,14 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      this.logger.error({
+        method: 'login',
+        error: 'User not found by his email',
+      });
+
+      throw new NotFoundException(
+        'This user does not exist, please check the email you registered with',
+      );
     }
 
     const userId: string = user.id;
@@ -98,7 +125,9 @@ export class AuthService {
         await this.deactivateUser(userId);
       }
 
-      throw new ForbiddenException('Invalid password');
+      this.logger.error({ method: 'login', error: 'Invalid password' });
+
+      throw new BadRequestException('Invalid password');
     }
 
     // Reset all invalid attempts to 0 in case of a successful login
@@ -123,22 +152,42 @@ export class AuthService {
   }
 
   async hashPassword(password: string) {
-    const bcryptRounds = this.configService.get<string>('BCRYPT_ROUNDS');
-    const rounds = parseInt(bcryptRounds, 10);
-    return bcrypt.hash(password, rounds);
+    try {
+      const bcryptRounds = this.configService.get<string>('BCRYPT_ROUNDS');
+      const rounds = convertToNumber(bcryptRounds);
+      return await bcrypt.hash(password, rounds);
+    } catch (error) {
+      this.logger.error({ method: 'hashPassword', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
+    }
   }
 
   async verifyPassword(password, hashedPassword) {
-    return bcrypt.compare(password, hashedPassword);
+    try {
+      return await bcrypt.compare(password, hashedPassword);
+    } catch (error) {
+      this.logger.error({ method: 'verifyPassword', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
+    }
   }
 
   async updateFailedAttempts(userId: string, attempts: number) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        failedAttempts: attempts,
-      },
-    });
+    try {
+      return await this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          failedAttempts: attempts,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ method: 'updateFailedAttempts', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR);
+    }
   }
 
   async activateUser(userId: string) {
@@ -152,7 +201,9 @@ export class AuthService {
         },
       });
     } catch (error) {
-      throw new NotImplementedException('Failed to activate user', error);
+      this.logger.error({ method: 'activateUser', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
 
@@ -168,7 +219,9 @@ export class AuthService {
         },
       });
     } catch (error) {
-      throw new NotImplementedException('Failed to deactivate user', error);
+      this.logger.error({ method: 'deactivateUser', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
 
@@ -183,10 +236,12 @@ export class AuthService {
         },
       });
     } catch (error) {
-      throw new NotImplementedException(
-        'Failed to reset all invalid attempts to 0 on login',
+      this.logger.error({
+        method: 'resetFailedAttempts',
         error,
-      );
+      });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
 

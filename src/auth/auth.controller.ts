@@ -4,7 +4,6 @@ import {
   Get,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Param,
   Post,
   Req,
@@ -13,7 +12,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
+import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
+import { LoggerError } from '../common/logger';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto';
@@ -26,10 +27,11 @@ export class AuthController {
     private configService: ConfigService,
   ) {}
 
+  private readonly logger = new LoggerError(AuthController.name);
+
   private setRefreshTokenCookie(res: Response, refreshToken: string) {
-    const cookieExpiresInterval = parseInt(
+    const cookieExpiresInterval = convertToNumber(
       this.configService.get<string>('COOKIE_EXPIRES_INTERVAL'),
-      10,
     );
 
     res.cookie('refreshToken', refreshToken, {
@@ -69,13 +71,7 @@ export class AuthController {
   @Post('/logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res() res: Response) {
-    const { id } = req.user;
-
-    if (!id) {
-      throw new NotFoundException('Not found user ID');
-    }
-
-    await this.authService.logout(id);
+    await this.authService.logout(req.user.id);
     res.clearCookie('refreshToken');
 
     return res.sendStatus(200);
@@ -89,7 +85,12 @@ export class AuthController {
     const { refreshToken } = req.cookies;
 
     if (!refreshToken) {
-      throw new UnauthorizedException('The token has not been transferred');
+      this.logger.error({
+        method: 'refreshTokens',
+        error: 'The token has not been transferred',
+      });
+
+      throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
     // Get new tokens and user data

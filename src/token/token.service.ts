@@ -1,13 +1,14 @@
 import {
   Injectable,
-  NotFoundException,
-  NotImplementedException,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JsonWebTokenError, JwtService } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import { Tokens, UserData } from '../auth';
+import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY } from '../common';
+import { LoggerError } from '../common/logger';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateEndDate } from './functions';
 import { JWTInfo } from './types';
@@ -20,13 +21,25 @@ export class TokenService {
     private configService: ConfigService,
   ) {}
 
+  private readonly logger = new LoggerError(TokenService.name);
+
   hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
 
   // Check if refresh token in the cookie and in the database are equal
   private isRefreshTokenMatches(token, hashedToken) {
-    return this.hashToken(token) === hashedToken;
+    const result: boolean = this.hashToken(token) === hashedToken;
+    if (!result) {
+      this.logger.error({
+        method: 'isRefreshTokenMatches',
+        error: 'The tokens do not match',
+      });
+
+      throw new UnauthorizedException(UNKNOWN_ERROR);
+    }
+
+    return result;
   }
 
   async validateRefreshToken(token: string) {
@@ -35,6 +48,8 @@ export class TokenService {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch (error) {
+      this.logger.error({ method: 'validateRefreshToken', error });
+
       return null;
     }
   }
@@ -48,9 +63,12 @@ export class TokenService {
     });
 
     if (!tokenFromDB || !tokenFromDB.token) {
-      throw new NotFoundException(
-        'Token data not found by userId or token is empty',
-      );
+      this.logger.error({
+        method: 'findToken',
+        error: 'Token not found',
+      });
+
+      throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
     return tokenFromDB;
@@ -58,12 +76,13 @@ export class TokenService {
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     // Hash token
-    const hashedToken = await this.hashToken(refreshToken);
+    const hashedToken = this.hashToken(refreshToken);
 
     // CONFIG
     const refreshExpires = this.configService.get<string>(
       'JWT_REFRESH_EXPIRES_IN',
     );
+    const tokenExpirationDate = calculateEndDate(refreshExpires);
 
     // Update refreshToken in the DB
     try {
@@ -73,67 +92,80 @@ export class TokenService {
         },
         create: {
           token: hashedToken,
-          expiresAt: calculateEndDate(refreshExpires),
+          expiresAt: tokenExpirationDate,
           userId,
         },
         update: {
           token: hashedToken,
-          expiresAt: calculateEndDate(refreshExpires),
+          expiresAt: tokenExpirationDate,
         },
       });
     } catch (error) {
-      throw new JsonWebTokenError('Failed to update the refresh token', error);
+      this.logger.error({ method: 'updateRefreshToken', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
 
   async createTokens(userId: string): Promise<Tokens> {
-    // CONFIG
-    // Access
-    const accessTokenSecret =
-      this.configService.get<string>('JWT_ACCESS_SECRET');
-    const accessTokenExpires = this.configService.get<string>(
-      'JWT_ACCESS_EXPIRES_IN',
-    );
+    try {
+      // CONFIG
+      // Access
+      const accessTokenSecret =
+        this.configService.get<string>('JWT_ACCESS_SECRET');
+      const accessTokenExpires = this.configService.get<string>(
+        'JWT_ACCESS_EXPIRES_IN',
+      );
 
-    // Refresh
-    const refreshTokenSecret =
-      this.configService.get<string>('JWT_REFRESH_SECRET');
-    const refreshTokenExpires = this.configService.get<string>(
-      'JWT_REFRESH_EXPIRES_IN',
-    );
+      // Refresh
+      const refreshTokenSecret =
+        this.configService.get<string>('JWT_REFRESH_SECRET');
+      const refreshTokenExpires = this.configService.get<string>(
+        'JWT_REFRESH_EXPIRES_IN',
+      );
 
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(
-        {
-          id: userId,
-        },
-        {
-          secret: accessTokenSecret,
-          expiresIn: accessTokenExpires,
-        },
-      ),
-      this.jwtService.signAsync(
-        {
-          id: userId,
-        },
-        {
-          secret: refreshTokenSecret,
-          expiresIn: refreshTokenExpires,
-        },
-      ),
-    ]);
+      const [accessToken, refreshToken] = await Promise.all([
+        this.jwtService.signAsync(
+          {
+            id: userId,
+          },
+          {
+            secret: accessTokenSecret,
+            expiresIn: accessTokenExpires,
+          },
+        ),
+        this.jwtService.signAsync(
+          {
+            id: userId,
+          },
+          {
+            secret: refreshTokenSecret,
+            expiresIn: refreshTokenExpires,
+          },
+        ),
+      ]);
 
-    return {
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-    };
+      return {
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      };
+    } catch (error) {
+      this.logger.error({ method: 'createTokens', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR);
+    }
   }
 
   async refreshTokens(refreshToken: string) {
     const tokenInfo: JWTInfo = await this.validateRefreshToken(refreshToken);
 
     if (!tokenInfo) {
-      throw new UnauthorizedException('Token is not valid or time has expired');
+      this.logger.error({
+        method: 'refreshTokens',
+        error: 'Failed to validate refresh token',
+      });
+
+      throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
     // Find user by his ID
@@ -144,22 +176,29 @@ export class TokenService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found when refresh');
+      this.logger.error({
+        method: 'refreshTokens',
+        error: 'User not found with token',
+      });
+
+      throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
     const userId: string = user.id;
 
-    // Check if this user has this token in the DB
+    /**
+     * Check if this user has this token in the DB
+     * If the token is not found or is empty,
+     * the method will throw an error
+     */
     const tokenFromDB = await this.findToken(userId);
 
-    const areTokensMatch = await this.isRefreshTokenMatches(
-      refreshToken,
-      tokenFromDB.token,
-    );
-
-    if (!tokenFromDB || !areTokensMatch) {
-      throw new UnauthorizedException('Something went wrong with the refresh');
-    }
+    /**
+     * Check if refresh token in the cookie and in the database are equal
+     * If the tokens are not equal,
+     * the method will throw an error
+     * */
+    this.isRefreshTokenMatches(refreshToken, tokenFromDB.token);
 
     // Create new tokens
     const tokens = await this.createTokens(userId);
@@ -172,7 +211,10 @@ export class TokenService {
       isActive: user.isActive,
     };
 
-    return { tokens, user: userData };
+    return {
+      tokens,
+      user: userData,
+    };
   }
 
   async removeToken(userId: string) {
@@ -183,7 +225,9 @@ export class TokenService {
         },
       });
     } catch (error) {
-      throw new NotImplementedException('Failed to delete the token', error);
+      this.logger.error({ method: 'removeToken', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
 }
