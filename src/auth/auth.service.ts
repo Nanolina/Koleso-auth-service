@@ -10,10 +10,11 @@ import { ClientProxy } from '@nestjs/microservices';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY, convertToNumber } from '../common';
+import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { LoggerError } from '../common/logger';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
+import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import { LoginDto, SignupDto } from './dto';
 import { AuthResponse, Tokens, UserData } from './types';
 
@@ -44,6 +45,11 @@ export class AuthService {
 
     // Create a UUID for a future activation link
     const activationLink = uuidv4();
+
+    // Get full activation link
+    const fullLink = `${this.configService.get<string>(
+      'AUTH_SERVICE_URL',
+    )}/auth/activate/${activationLink}`;
 
     // Create new user
     let newUser;
@@ -87,8 +93,8 @@ export class AuthService {
 
     try {
       await this.client.emit('user_created', {
+        activationLink: fullLink,
         email: newUser.email,
-        activationLink: newUser.activationLink,
       });
     } catch (error) {
       this.logger.error({ method: 'signup (user_created event)', error });
@@ -202,14 +208,29 @@ export class AuthService {
     }
   }
 
-  async activateUser(userId: string) {
+  async verifyEmail(activationLink: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        activationLink,
+      },
+    });
+
+    if (!user) {
+      this.logger.error({
+        method: 'activateUser',
+        error: 'User not found by activation link',
+      });
+
+      throw new NotFoundException(UNKNOWN_ERROR_TRY);
+    }
+
     try {
       await this.prisma.user.update({
         where: {
-          id: userId,
+          id: user.id,
         },
         data: {
-          isActive: true,
+          isVerifiedEmail: true,
         },
       });
     } catch (error) {

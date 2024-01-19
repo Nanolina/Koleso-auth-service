@@ -109,12 +109,15 @@ export class AuthController {
   @Public()
   @Get('/activate/:activationLink')
   @HttpCode(HttpStatus.OK)
-  async activateLink(
+  async verifyEmail(
     @Param('activationLink') activationLink: string,
     @Res() res: Response,
   ) {
-    await this.authService.activateUser(activationLink);
+    console.log('activationLink', activationLink);
+    await this.authService.verifyEmail(activationLink);
 
-    res.redirect(process.env.SELLER_INTERFACE_URL);
+    const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
+
+    res.redirect(interfaceURL);
   }
 }
