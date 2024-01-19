@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClientProxy } from '@nestjs/microservices';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,6 +23,7 @@ export class AuthService {
     private prisma: PrismaService,
     private tokenService: TokenService,
     private configService: ConfigService,
+    @Inject('AUTH_CLIENT') private readonly client: ClientProxy,
   ) {}
 
   private readonly logger = new LoggerError(AuthService.name);
@@ -81,6 +84,15 @@ export class AuthService {
       id: newUser.id,
       isActive: newUser.isActive,
     };
+
+    try {
+      await this.client.emit('user_created', {
+        email: newUser.email,
+        activationLink: newUser.activationLink,
+      });
+    } catch (error) {
+      this.logger.error({ method: 'signup (user_created event)', error });
+    }
 
     return {
       tokens,
