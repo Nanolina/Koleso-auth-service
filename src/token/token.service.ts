@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import { Tokens, UserData } from '../auth';
 import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY } from '../common';
-import { LoggerError } from '../common/logger';
+import { MyLogger } from '../common/logger';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateEndDate } from './functions';
 import { JWTInfo } from './types';
@@ -21,7 +21,7 @@ export class TokenService {
     private configService: ConfigService,
   ) {}
 
-  private readonly logger = new LoggerError(TokenService.name);
+  private readonly logger = new MyLogger(TokenService.name);
 
   hashToken(token: string) {
     return createHash('sha256').update(token).digest('hex');

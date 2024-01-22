@@ -1,12 +1,15 @@
 import { NotImplementedException } from '@nestjs/common';
 import { addDays, addHours, addMinutes, addSeconds, addWeeks } from 'date-fns';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
+import { MyLogger } from '../common/logger';
 
 // See the .env file to change the token expires in - interval type
 export function calculateEndDate(interval: string): Date {
   const currentDate = new Date();
   const intervalType = interval.slice(-1);
   const intervalNumber = convertToNumber(interval.slice(0, -1));
+
+  const logger = new MyLogger('calculateEndDate');
 
   switch (intervalType) {
     case 's':
@@ -20,7 +23,7 @@ export function calculateEndDate(interval: string): Date {
     case 'w':
       return addWeeks(currentDate, intervalNumber);
     default:
-      this.logger.error({
+      logger.error({
         method: 'calculateEndDate',
         error: 'Invalid interval type, please check .env',
       });

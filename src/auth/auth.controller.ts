@@ -14,7 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
-import { LoggerError } from '../common/logger';
+import { MyLogger } from '../common/logger';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto';
@@ -27,7 +27,7 @@ export class AuthController {
     private configService: ConfigService,
   ) {}
 
-  private readonly logger = new LoggerError(AuthController.name);
+  private readonly logger = new MyLogger(AuthController.name);
 
   private setRefreshTokenCookie(res: Response, refreshToken: string) {
     const cookieExpiresInterval = convertToNumber(
@@ -113,7 +113,6 @@ export class AuthController {
     @Param('activationLink') activationLink: string,
     @Res() res: Response,
   ) {
-    console.log('activationLink', activationLink);
     await this.authService.verifyEmail(activationLink);
 
     const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');

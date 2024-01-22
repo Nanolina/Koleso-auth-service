@@ -1,8 +1,12 @@
 import { Logger } from '@nestjs/common';
-import { ILoggerError } from './types';
+import { ILoggerError, ILoggerLog } from './types';
 
-export class LoggerError extends Logger {
+export class MyLogger extends Logger {
   error(message: ILoggerError) {
     super.error(message);
+  }
+
+  log(message: ILoggerLog) {
+    super.log(message);
   }
 }
