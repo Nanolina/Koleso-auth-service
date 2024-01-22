@@ -182,16 +182,8 @@ export class AuthService {
         },
       });
 
-      const userData: UserData = {
-        id: user.id,
-        email: user.email,
-        activationLinkId: user.activationLinkId,
-        isActive: user.isActive,
-        isVerifiedEmail: user.isVerifiedEmail,
-      };
-
       return {
-        user: userData,
+        email: user.email,
       };
     } catch (error) {
       this.logger.error({ method: 'changeEmail', error });

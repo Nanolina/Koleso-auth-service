@@ -19,7 +19,6 @@ import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { ChangeEmailDto, LoginDto, SignupDto } from './dto';
-import { UserData } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -126,7 +125,7 @@ export class AuthController {
   async changeEmail(
     @Req() req: Request,
     @Body() dto: ChangeEmailDto,
-  ): Promise<{ user: UserData }> {
+  ): Promise<ChangeEmailDto> {
     return await this.authService.changeEmail({
       id: req.user.id,
       email: dto.email,
