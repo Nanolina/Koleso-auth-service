@@ -11,7 +11,7 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
-import { MyLogger } from '../common/logger';
+import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
@@ -24,10 +24,9 @@ export class AuthService {
     private prisma: PrismaService,
     private tokenService: TokenService,
     private configService: ConfigService,
+    private readonly logger: MyLogger,
     @Inject('AUTH_CLIENT') private readonly client: ClientProxy,
   ) {}
-
-  private readonly logger = new MyLogger(AuthService.name);
 
   async signup(dto: SignupDto): Promise<AuthResponse> {
     // Get data from dto
@@ -96,6 +95,8 @@ export class AuthService {
         activationLink: fullLink,
         email: newUser.email,
       });
+
+      this.logger.log({ method: 'signup', log: 'user_created' });
     } catch (error) {
       this.logger.error({ method: 'signup (user_created event)', error });
     }

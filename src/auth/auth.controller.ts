@@ -14,7 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
-import { MyLogger } from '../common/logger';
+import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
 import { LoginDto, SignupDto } from './dto';
@@ -25,9 +25,8 @@ export class AuthController {
     private authService: AuthService,
     private tokenService: TokenService,
     private configService: ConfigService,
+    private readonly logger: MyLogger,
   ) {}
-
-  private readonly logger = new MyLogger(AuthController.name);
 
   private setRefreshTokenCookie(res: Response, refreshToken: string) {
     const cookieExpiresInterval = convertToNumber(
