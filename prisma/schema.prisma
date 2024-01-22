@@ -14,7 +14,7 @@ model User {
   phone            String    @unique @db.VarChar(20)
   isActive         Boolean   @default(true)
   deactivationDate DateTime?
-  activationLink   String?
+  activationLinkId   String?
   password         String
   failedAttempts   Int       @default(0)
   isVerifiedEmail  Boolean   @default(false)

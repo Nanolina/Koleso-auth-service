@@ -15,7 +15,7 @@ import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
-import { LoginDto, SignupDto } from './dto';
+import { ChangeEmailServiceDto, LoginDto, SignupDto } from './dto';
 import { AuthResponse, Tokens, UserData } from './types';
 
 @Injectable()
@@ -43,12 +43,7 @@ export class AuthService {
     const hashedPassword = await this.hashPassword(password);
 
     // Create a UUID for a future activation link
-    const activationLink = uuidv4();
-
-    // Get full activation link
-    const fullLink = `${this.configService.get<string>(
-      'AUTH_SERVICE_URL',
-    )}/auth/activate/${activationLink}`;
+    const activationLinkId = uuidv4();
 
     // Create new user
     let newUser;
@@ -57,7 +52,7 @@ export class AuthService {
         data: {
           email,
           phone,
-          activationLink,
+          activationLinkId,
           password: hashedPassword,
         },
       });
@@ -84,15 +79,18 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(newUser.id);
-
+    console.log('tokensSecondSignUp', tokens);
     const userData: UserData = {
+      activationLinkId,
       id: newUser.id,
+      email: newUser.email,
       isActive: newUser.isActive,
+      isVerifiedEmail: newUser.isVerifiedEmail,
     };
 
     try {
       await this.client.emit('user_created', {
-        activationLink: fullLink,
+        activationLinkId,
         email: newUser.email,
       });
 
@@ -154,10 +152,13 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
-
+    console.log('tokensSecondLogin', tokens);
     const userData: UserData = {
       id: userId,
+      email: user.email,
+      activationLinkId: user.activationLinkId,
       isActive: user.isActive,
+      isVerifiedEmail: user.isVerifiedEmail,
     };
 
     return {
@@ -168,6 +169,35 @@ export class AuthService {
 
   async logout(userId: string) {
     await this.tokenService.removeToken(userId);
+  }
+
+  async changeEmail(dto: ChangeEmailServiceDto) {
+    try {
+      const user = await this.prisma.user.update({
+        where: {
+          id: dto.id,
+        },
+        data: {
+          email: dto.email,
+        },
+      });
+
+      const userData: UserData = {
+        id: user.id,
+        email: user.email,
+        activationLinkId: user.activationLinkId,
+        isActive: user.isActive,
+        isVerifiedEmail: user.isVerifiedEmail,
+      };
+
+      return {
+        user: userData,
+      };
+    } catch (error) {
+      this.logger.error({ method: 'changeEmail', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
+    }
   }
 
   async hashPassword(password: string) {
@@ -209,17 +239,17 @@ export class AuthService {
     }
   }
 
-  async verifyEmail(activationLink: string) {
+  async verifyEmail(activationLinkId: string) {
     const user = await this.prisma.user.findFirst({
       where: {
-        activationLink,
+        activationLinkId,
       },
     });
 
     if (!user) {
       this.logger.error({
         method: 'activateUser',
-        error: 'User not found by activation link',
+        error: 'User not found by activation link ID',
       });
 
       throw new NotFoundException(UNKNOWN_ERROR_TRY);
@@ -281,6 +311,7 @@ export class AuthService {
 
   private async createTokensInTokenService(userId: string): Promise<Tokens> {
     const tokens = await this.tokenService.createTokens(userId);
+    console.log('tokensFirst', tokens);
     await this.tokenService.updateRefreshToken(userId, tokens.refreshToken);
     return tokens;
   }

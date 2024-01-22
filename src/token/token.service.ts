@@ -26,8 +26,18 @@ export class TokenService {
     return createHash('sha256').update(token).digest('hex');
   }
 
-  // Check if refresh token in the cookie and in the database are equal
-  private isRefreshTokenMatches(token, hashedToken) {
+  /**
+   * Checks if the token in the cookie matches the hashed token in the database.
+   *
+   * @param {string} token - The token from the cookie.
+   * @param {string} hashedToken - Hashed token stored in the database.
+   * @returns {boolean} Returns `true` if the hashed token matches the token from the cookie, otherwise throws an exception.
+   * @throws {UnauthorizedException} Throws an exception if the tokens do not match.
+   */
+  private isRefreshTokenMatches(token: string, hashedToken: string) {
+    console.log('token', token);
+    console.log('this.hashToken(token)', this.hashToken(token));
+    console.log('hashedToken', hashedToken);
     const result: boolean = this.hashToken(token) === hashedToken;
     if (!result) {
       this.logger.error({
@@ -191,7 +201,6 @@ export class TokenService {
      * the method will throw an error
      */
     const tokenFromDB = await this.findToken(userId);
-
     /**
      * Check if refresh token in the cookie and in the database are equal
      * If the tokens are not equal,
@@ -201,13 +210,16 @@ export class TokenService {
 
     // Create new tokens
     const tokens = await this.createTokens(userId);
-
+    console.log('tokensTOKENSERVICE', tokens);
     // Update refresh token in the DB
     await this.updateRefreshToken(userId, tokens.refreshToken);
 
     const userData: UserData = {
       id: userId,
+      email: user.email,
+      activationLinkId: user.activationLinkId,
       isActive: user.isActive,
+      isVerifiedEmail: user.isVerifiedEmail,
     };
 
     return {

@@ -5,7 +5,7 @@ CREATE TABLE "User" (
     "phone" VARCHAR(20) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "deactivationDate" TIMESTAMP(3),
-    "activationLink" TEXT,
+    "activationLinkId" TEXT,
     "password" TEXT NOT NULL,
     "failedAttempts" INTEGER NOT NULL DEFAULT 0,
     "isVerifiedEmail" BOOLEAN NOT NULL DEFAULT false,

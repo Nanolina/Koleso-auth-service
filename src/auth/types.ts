@@ -5,7 +5,10 @@ export type Tokens = {
 
 export type UserData = {
   id: string;
+  email: string;
+  activationLinkId: string;
   isActive: boolean;
+  isVerifiedEmail: boolean;
 };
 
 export type AuthResponse = {

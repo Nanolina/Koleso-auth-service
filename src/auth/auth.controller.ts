@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Req,
   Res,
@@ -17,7 +18,8 @@ import { Public } from '../common/decorators';
 import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
 import { AuthService } from './auth.service';
-import { LoginDto, SignupDto } from './dto';
+import { ChangeEmailDto, LoginDto, SignupDto } from './dto';
+import { UserData } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -106,16 +108,28 @@ export class AuthController {
   }
 
   @Public()
-  @Get('/activate/:activationLink')
+  @Get('/activate/:activationLinkId')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(
-    @Param('activationLink') activationLink: string,
+    @Param('activationLinkId') activationLinkId: string,
     @Res() res: Response,
   ) {
-    await this.authService.verifyEmail(activationLink);
+    await this.authService.verifyEmail(activationLinkId);
 
     const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
 
     res.redirect(interfaceURL);
+  }
+
+  @Patch('/change-email')
+  @HttpCode(HttpStatus.OK)
+  async changeEmail(
+    @Req() req: Request,
+    @Body() dto: ChangeEmailDto,
+  ): Promise<{ user: UserData }> {
+    return await this.authService.changeEmail({
+      id: req.user.id,
+      email: dto.email,
+    });
   }
 }
