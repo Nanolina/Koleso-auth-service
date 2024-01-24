@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -131,6 +132,17 @@ export class AuthService {
       );
     }
 
+    if (!user.isActive) {
+      this.logger.error({
+        method: 'login',
+        error: 'User is deactivated',
+      });
+
+      throw new ForbiddenException(
+        'You have been blocked. Please click on the "Forgot password" to restore access',
+      );
+    }
+
     const userId: string = user.id;
 
     // Verify password
@@ -143,15 +155,20 @@ export class AuthService {
     if (!passwordMatches) {
       const failedAttempts = user.failedAttempts + 1;
       await this.updateFailedAttempts(userId, failedAttempts);
+      const remainingAttempts = 5 - failedAttempts;
+      const errorMessage = `Invalid password. Number of remaining attempts: ${remainingAttempts}`;
 
       // Deactivate user
       if (failedAttempts >= 5) {
         await this.deactivateUser(userId);
       }
 
-      this.logger.error({ method: 'login', error: 'Invalid password' });
+      this.logger.error({
+        method: 'login',
+        error: errorMessage,
+      });
 
-      throw new BadRequestException('Invalid password');
+      throw new BadRequestException(errorMessage);
     }
 
     // Reset all invalid attempts to 0 in case of a successful login
@@ -262,6 +279,8 @@ export class AuthService {
         },
         data: {
           password: hashedPassword,
+          isActive: true,
+          failedAttempts: 0,
         },
       });
     } catch (error) {
