@@ -34,9 +34,6 @@ export class TokenService {
    * @throws {UnauthorizedException} Throws an exception if the tokens do not match.
    */
   private isRefreshTokenMatches(token: string, hashedToken: string) {
-    console.log('token', token);
-    console.log('this.hashToken(token)', this.hashToken(token));
-    console.log('hashedToken', hashedToken);
     const result: boolean = this.hashToken(token) === hashedToken;
     if (!result) {
       this.logger.error({
@@ -209,7 +206,7 @@ export class TokenService {
 
     // Create new tokens
     const tokens = await this.createTokens(userId);
-    console.log('tokensTOKENSERVICE', tokens);
+
     // Update refresh token in the DB
     await this.updateRefreshToken(userId, tokens.refreshToken);
 

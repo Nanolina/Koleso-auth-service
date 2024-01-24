@@ -87,7 +87,6 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(newUser.id);
-    console.log('tokensSecondSignUp', tokens);
     const userData: UserData = {
       activationLinkId,
       id: newUser.id,
@@ -160,7 +159,6 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
-    console.log('tokensSecondLogin', tokens);
     const userData: UserData = {
       id: userId,
       email: user.email,
@@ -404,7 +402,6 @@ export class AuthService {
 
   private async createTokensInTokenService(userId: string): Promise<Tokens> {
     const tokens = await this.tokenService.createTokens(userId);
-    console.log('tokensFirst', tokens);
     await this.tokenService.updateRefreshToken(userId, tokens.refreshToken);
     return tokens;
   }
