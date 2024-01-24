@@ -7,10 +7,9 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
 import { Tokens, UserData } from '../auth';
-import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY } from '../common';
+import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY, calculateEndDate } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { calculateEndDate } from './functions';
 import { JWTInfo } from './types';
 
 @Injectable()

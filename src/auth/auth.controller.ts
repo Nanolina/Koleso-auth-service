@@ -17,8 +17,9 @@ import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
 import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
+import { PasswordResetTokenService } from './../password-reset-token/password-reset-token.service';
 import { AuthService } from './auth.service';
-import { ChangeEmailDto, LoginDto, SignupDto } from './dto';
+import { ChangeEmailDto, LoginDto, SetNewPasswordDto, SignupDto } from './dto';
 
 @Controller('auth')
 export class AuthController {
@@ -26,6 +27,7 @@ export class AuthController {
     private authService: AuthService,
     private tokenService: TokenService,
     private configService: ConfigService,
+    private passwordResetTokenService: PasswordResetTokenService,
     private readonly logger: MyLogger,
   ) {}
 
@@ -130,5 +132,48 @@ export class AuthController {
       id: req.user.id,
       email: dto.email,
     });
+  }
+
+  @Public()
+  @Post('/password/recovery')
+  @HttpCode(HttpStatus.OK)
+  async requestPasswordRecovery(@Body() dto: ChangeEmailDto): Promise<void> {
+    return await this.authService.requestPasswordRecovery({
+      email: dto.email,
+    });
+  }
+
+  @Public()
+  @Get('/password/reset/:userId/:passwordResetToken')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(
+    @Param('userId') userId: string,
+    @Param('passwordResetToken') passwordResetToken: string,
+    @Res() res: Response,
+  ) {
+    await this.passwordResetTokenService.verifyToken(passwordResetToken);
+
+    const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
+    const setNewPasswordURL = `${interfaceURL}/password/set/${userId}`;
+
+    res.redirect(setNewPasswordURL);
+  }
+
+  @Public()
+  @Post('/password/set/:userId')
+  @HttpCode(HttpStatus.OK)
+  async setNewPassword(
+    @Body() dto: SetNewPasswordDto,
+    @Param('userId') userId: string,
+    @Res() res: Response,
+  ): Promise<Response> {
+    const { tokens, user } = await this.authService.setNewPassword({
+      userId,
+      ...dto,
+    });
+
+    await this.setRefreshTokenCookie(res, tokens.refreshToken);
+
+    return res.send({ user, token: tokens.accessToken });
   }
 }

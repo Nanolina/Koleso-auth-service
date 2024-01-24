@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AtGuard } from './common/guards';
+import { PasswordResetTokenModule } from './password-reset-token/password-reset-token.module';
 import { PrismaService } from './prisma/prisma.service';
 import { TokenModule } from './token/token.module';
 
@@ -10,6 +11,7 @@ import { TokenModule } from './token/token.module';
   imports: [
     AuthModule,
     TokenModule,
+    PasswordResetTokenModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),

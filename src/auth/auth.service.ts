@@ -7,15 +7,22 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
+import { PasswordResetTokenService } from '../password-reset-token/password-reset-token.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TokenService } from '../token/token.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
-import { ChangeEmailServiceDto, LoginDto, SignupDto } from './dto';
+import {
+  ChangeEmailDto,
+  ChangeEmailServiceDto,
+  LoginDto,
+  SetNewPasswordServiceDto,
+  SignupDto,
+} from './dto';
 import { AuthResponse, Tokens, UserData } from './types';
 
 @Injectable()
@@ -23,6 +30,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private tokenService: TokenService,
+    private passwordResetTokenService: PasswordResetTokenService,
     private configService: ConfigService,
     private readonly logger: MyLogger,
     @Inject('AUTH_CLIENT') private readonly client: ClientProxy,
@@ -190,6 +198,99 @@ export class AuthService {
 
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
+  }
+
+  async requestPasswordRecovery(dto: ChangeEmailDto) {
+    // Check user with incoming email
+    const email = dto.email;
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+      },
+    });
+
+    if (!user) {
+      throw new BadRequestException('The user with this email does not exist');
+    }
+
+    const userId = user.id;
+
+    // Create a password reset token in the database
+    const { passwordResetToken } =
+      await this.passwordResetTokenService.create(userId);
+
+    // Create an event for notification-service to subscribe and send the link to email
+    try {
+      await this.client.emit('password_reset_requested', {
+        userId,
+        email,
+        passwordResetToken,
+      });
+
+      this.logger.log({
+        method: 'requestPasswordRecovery',
+        log: 'password_reset_requested',
+      });
+    } catch (error) {
+      this.logger.error({
+        method: 'requestPasswordRecovery (password_reset_requested event)',
+        error,
+      });
+    }
+  }
+
+  async setNewPassword(dto: SetNewPasswordServiceDto): Promise<AuthResponse> {
+    // Get data from dto
+    const { userId, password, repeatedPassword } = dto;
+
+    // Password comparison
+    if (password !== repeatedPassword) {
+      this.logger.error({
+        method: 'setNewPassword',
+        error: 'Passwords do not match',
+      });
+
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    // Hash the password
+    const hashedPassword = await this.hashPassword(password);
+
+    let user: User;
+    try {
+      user = await this.prisma.user.update({
+        where: {
+          id: userId,
+        },
+        data: {
+          password: hashedPassword,
+        },
+      });
+    } catch (error) {
+      this.logger.error({ method: 'setNewPassword', error });
+
+      throw new InternalServerErrorException(
+        'Something went wrong, please check the data',
+      );
+    }
+
+    // Delete token password reset token
+    await this.passwordResetTokenService.delete(userId);
+
+    // Create new tokens
+    const tokens = await this.createTokensInTokenService(userId);
+    const userData: UserData = {
+      activationLinkId: user.activationLinkId,
+      id: user.id,
+      email: user.email,
+      isActive: user.isActive,
+      isVerifiedEmail: user.isVerifiedEmail,
+    };
+
+    return {
+      tokens,
+      user: userData,
+    };
   }
 
   async hashPassword(password: string) {
