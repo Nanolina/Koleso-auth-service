@@ -272,9 +272,6 @@ export class AuthService {
       );
     }
 
-    // Delete token password reset token
-    await this.passwordResetTokenService.delete(userId);
-
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
     const userData: UserData = {

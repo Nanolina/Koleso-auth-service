@@ -41,7 +41,8 @@ export class PasswordResetTokenService {
     };
   }
 
-  async verifyToken(token: string): Promise<boolean> {
+  async verifyAndDelete(token: string, userId: string): Promise<void> {
+    // Verify
     const tokenFromDB = await this.prisma.passwordResetToken.findFirst({
       where: {
         token,
@@ -60,7 +61,8 @@ export class PasswordResetTokenService {
       throw new NotFoundException('Invalid password reset link');
     }
 
-    return true;
+    // Delete many tokens by userId
+    await this.delete(userId);
   }
 
   async delete(userId: string): Promise<void> {

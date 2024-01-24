@@ -151,7 +151,10 @@ export class AuthController {
     @Param('passwordResetToken') passwordResetToken: string,
     @Res() res: Response,
   ) {
-    await this.passwordResetTokenService.verifyToken(passwordResetToken);
+    await this.passwordResetTokenService.verifyAndDelete(
+      passwordResetToken,
+      userId,
+    );
 
     const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
     const setNewPasswordURL = `${interfaceURL}/password/set/${userId}`;
