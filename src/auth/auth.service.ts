@@ -132,18 +132,19 @@ export class AuthService {
       );
     }
 
+    // Variables
+    const userId: string = user.id;
+    const errorIfUserNotActive =
+      'Sorry, the number of attempts has been exhausted. Unfortunately, your account has been locked and you can recover it by clicking on the "Forgot password" link';
+
     if (!user.isActive) {
       this.logger.error({
         method: 'login',
         error: 'User is deactivated',
       });
 
-      throw new ForbiddenException(
-        'You have been blocked. Please click on the "Forgot password" to restore access',
-      );
+      throw new ForbiddenException(errorIfUserNotActive);
     }
-
-    const userId: string = user.id;
 
     // Verify password
     const passwordMatches = await this.verifyPassword(
@@ -153,6 +154,7 @@ export class AuthService {
 
     // Increase failed attempts
     if (!passwordMatches) {
+      // Variables
       const failedAttempts = user.failedAttempts + 1;
       await this.updateFailedAttempts(userId, failedAttempts);
       const remainingAttempts = 5 - failedAttempts;
@@ -161,6 +163,13 @@ export class AuthService {
       // Deactivate user
       if (failedAttempts >= 5) {
         await this.deactivateUser(userId);
+
+        this.logger.error({
+          method: 'login',
+          error: errorIfUserNotActive,
+        });
+
+        throw new ForbiddenException(errorIfUserNotActive);
       }
 
       this.logger.error({
