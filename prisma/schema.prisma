@@ -22,16 +22,7 @@ model User {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @default(now())
   passwordResetTokens PasswordResetToken[]
-  sessions            Session[]
   token               Token?
-}
-
-model Session {
-  id        String   @id @default(uuid())
-  userId    String?
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  user      User?    @relation(fields: [userId], references: [id])
 }
 
 model Token {
