@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { AtStrategy, RtStrategy } from '../common/strategies';
 import { LoggerModule } from '../logger/logger.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { AtStrategy, RtStrategy } from './strategies';
 import { TokenService } from './token.service';
 
 @Module({
