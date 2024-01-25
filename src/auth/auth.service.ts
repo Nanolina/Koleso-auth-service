@@ -218,6 +218,19 @@ export class AuthService {
         email: user.email,
       };
     } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          this.logger.error({
+            method: 'changeEmail',
+            error: 'A user with the same email already exists',
+          });
+
+          throw new BadRequestException(
+            'A user with the same email already exists',
+          );
+        }
+      }
+
       this.logger.error({ method: 'changeEmail', error });
 
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
