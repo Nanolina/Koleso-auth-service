@@ -81,7 +81,7 @@ export class TokenService {
 
   async updateRefreshToken(userId: string, refreshToken: string) {
     // Hash token
-    const hashedToken = this.hashToken(refreshToken);
+    const hashedToken = await this.hashToken(refreshToken);
 
     // CONFIG
     const refreshExpires = this.configService.get<string>(
@@ -202,7 +202,7 @@ export class TokenService {
      * If the tokens are not equal,
      * the method will throw an error
      * */
-    this.isRefreshTokenMatches(refreshToken, tokenFromDB.token);
+    await this.isRefreshTokenMatches(refreshToken, tokenFromDB.token);
 
     // Create new tokens
     const tokens = await this.createTokens(userId);
