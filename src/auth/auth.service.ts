@@ -105,6 +105,7 @@ export class AuthService {
 
     try {
       await this.client.emit('user_created', {
+        id: newUser.id,
         activationLinkId,
         email: newUser.email,
       });

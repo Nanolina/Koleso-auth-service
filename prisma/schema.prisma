@@ -23,6 +23,23 @@ model User {
   updatedAt           DateTime             @default(now())
   passwordResetTokens PasswordResetToken[]
   token               Token?
+  userRoles           UserRole[]
+}
+
+model Role {
+  id    Int        @id @default(autoincrement())
+  name  RoleType   @unique @default(Customer)
+  users UserRole[] @relation("RoleToUserRoles")
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  userId String
+  roleId Int
+  role   Role   @relation("RoleToUserRoles", fields: [roleId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, roleId])
 }
 
 model Token {
@@ -41,4 +58,9 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
   expiresAt DateTime
   user      User     @relation(fields: [userId], references: [id])
+}
+
+enum RoleType {
+  Customer
+  Seller
 }
