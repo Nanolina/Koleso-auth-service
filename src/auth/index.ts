@@ -1,1 +1,1 @@
-export { UserData, Tokens } from './types';
+export { Tokens } from './types';

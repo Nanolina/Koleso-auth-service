@@ -6,11 +6,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash } from 'crypto';
-import { Tokens, UserData } from '../auth';
+import { Tokens } from '../auth';
 import { UNKNOWN_ERROR, UNKNOWN_ERROR_TRY, calculateEndDate } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { JWTInfo } from './types';
+import { JWTInfo, UserData } from './types';
 
 @Injectable()
 export class TokenService {
@@ -213,6 +213,7 @@ export class TokenService {
     const userData: UserData = {
       id: userId,
       email: user.email,
+      phone: user.phone,
       activationLinkId: user.activationLinkId,
       isActive: user.isActive,
       isVerifiedEmail: user.isVerifiedEmail,

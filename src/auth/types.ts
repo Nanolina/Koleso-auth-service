@@ -3,13 +3,17 @@ export type Tokens = {
   refreshToken: string;
 };
 
-export type UserData = {
+export interface UserDataSetNewPassword {
+  isActive: boolean;
+}
+
+export interface UserData extends UserDataSetNewPassword {
   id: string;
   email: string;
+  phone: string;
   activationLinkId: string;
-  isActive: boolean;
   isVerifiedEmail: boolean;
-};
+}
 
 export type AuthResponse = {
   tokens: Tokens;

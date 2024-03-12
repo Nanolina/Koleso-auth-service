@@ -20,11 +20,17 @@ import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import {
   ChangeEmailDto,
   ChangeEmailServiceDto,
+  ChangePhoneServiceDto,
   LoginDto,
   SetNewPasswordServiceDto,
   SignupDto,
 } from './dto';
-import { AuthResponse, Tokens, UserData } from './types';
+import {
+  AuthResponse,
+  Tokens,
+  UserData,
+  UserDataSetNewPassword,
+} from './types';
 
 @Injectable()
 export class AuthService {
@@ -92,6 +98,7 @@ export class AuthService {
       activationLinkId,
       id: newUser.id,
       email: newUser.email,
+      phone: newUser.phone,
       isActive: newUser.isActive,
       isVerifiedEmail: newUser.isVerifiedEmail,
     };
@@ -188,6 +195,7 @@ export class AuthService {
     const userData: UserData = {
       id: userId,
       email: user.email,
+      phone: user.phone,
       activationLinkId: user.activationLinkId,
       isActive: user.isActive,
       isVerifiedEmail: user.isVerifiedEmail,
@@ -237,6 +245,40 @@ export class AuthService {
     }
   }
 
+  async changePhone(dto: ChangePhoneServiceDto) {
+    try {
+      const user = await this.prisma.user.update({
+        where: {
+          id: dto.id,
+        },
+        data: {
+          phone: dto.phone,
+        },
+      });
+
+      return {
+        phone: user.phone,
+      };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          this.logger.error({
+            method: 'changePhone',
+            error: 'A user with the same phone already exists',
+          });
+
+          throw new BadRequestException(
+            'A user with the same phone already exists',
+          );
+        }
+      }
+
+      this.logger.error({ method: 'changePhone', error });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
+    }
+  }
+
   async requestPasswordRecovery(dto: ChangeEmailDto) {
     // Check user with incoming email
     const email = dto.email;
@@ -276,7 +318,7 @@ export class AuthService {
     }
   }
 
-  async setNewPassword(dto: SetNewPasswordServiceDto): Promise<AuthResponse> {
+  async setNewPassword(dto: SetNewPasswordServiceDto) {
     // Get data from dto
     const { userId, password, repeatedPassword } = dto;
 
@@ -315,12 +357,8 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
-    const userData: UserData = {
-      activationLinkId: user.activationLinkId,
-      id: user.id,
-      email: user.email,
+    const userData: UserDataSetNewPassword = {
       isActive: user.isActive,
-      isVerifiedEmail: user.isVerifiedEmail,
     };
 
     return {

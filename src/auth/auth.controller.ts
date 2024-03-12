@@ -19,7 +19,13 @@ import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
 import { PasswordResetTokenService } from './../password-reset-token/password-reset-token.service';
 import { AuthService } from './auth.service';
-import { ChangeEmailDto, LoginDto, SetNewPasswordDto, SignupDto } from './dto';
+import {
+  ChangeEmailDto,
+  ChangePhoneDto,
+  LoginDto,
+  SetNewPasswordDto,
+  SignupDto,
+} from './dto';
 
 @Controller('auth')
 export class AuthController {
@@ -131,6 +137,18 @@ export class AuthController {
     return await this.authService.changeEmail({
       id: req.user.id,
       email: dto.email,
+    });
+  }
+
+  @Patch('/change-phone')
+  @HttpCode(HttpStatus.OK)
+  async changePhone(
+    @Req() req: Request,
+    @Body() dto: ChangePhoneDto,
+  ): Promise<ChangePhoneDto> {
+    return await this.authService.changePhone({
+      id: req.user.id,
+      phone: dto.phone,
     });
   }
 

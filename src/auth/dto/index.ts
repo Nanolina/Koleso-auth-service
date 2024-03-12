@@ -1,4 +1,5 @@
 export { ChangeEmailDto, ChangeEmailServiceDto } from './change-email.dto';
+export { ChangePhoneDto, ChangePhoneServiceDto } from './change-phone.dto';
 export { LoginDto } from './login.dto';
 export {
   SetNewPasswordDto,
