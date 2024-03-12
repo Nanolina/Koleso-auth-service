@@ -144,8 +144,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
-    // Find user by email
-    const user = await this.prisma.user.findFirst({
+    // Find user and roles
+    const user = await this.prisma.user.findUnique({
       where: {
         email: dto.email,
       },
@@ -162,75 +162,55 @@ export class AuthService {
       },
     });
 
+    // Validate user existence and active status
     if (!user) {
-      this.logger.error({
-        method: 'login',
-        error: 'User not found by his email',
-      });
-
+      this.logger.error({ method: 'login', error: 'User not found' });
       throw new NotFoundException(
         'This user does not exist, please check the email you registered with',
       );
     }
-
-    // Variables
-    const userId: string = user.id;
-    const errorIfUserNotActive =
-      'Sorry, the number of attempts has been exhausted. Unfortunately, your account has been locked and you can recover it by clicking on the "Forgot password" link';
-
     if (!user.isActive) {
-      this.logger.error({
-        method: 'login',
-        error: 'User is deactivated',
-      });
-
-      throw new ForbiddenException(errorIfUserNotActive);
+      this.logger.error({ method: 'login', error: 'User is deactivated' });
+      throw new ForbiddenException(
+        'Your account has been locked. Please recover it by clicking on the "Forgot password" link',
+      );
     }
 
-    // Verify password
+    // Verify the password
     const passwordMatches = await this.verifyPassword(
       dto.password,
       user.password,
     );
-
-    // Increase failed attempts
     if (!passwordMatches) {
-      // Variables
       const failedAttempts = user.failedAttempts + 1;
-      await this.updateFailedAttempts(userId, failedAttempts);
-      const remainingAttempts = 5 - failedAttempts;
-      const errorMessage = `Invalid password. Number of remaining attempts: ${remainingAttempts}`;
+      await this.updateFailedAttempts(user.id, failedAttempts);
 
-      // Deactivate user
       if (failedAttempts >= 5) {
-        await this.deactivateUser(userId);
-
+        await this.deactivateUser(user.id);
         this.logger.error({
           method: 'login',
-          error: errorIfUserNotActive,
+          error: 'Account locked due to too many failed attempts',
         });
-
-        throw new ForbiddenException(errorIfUserNotActive);
+        throw new ForbiddenException(
+          'Sorry, your account has been locked due to too many failed login attempts',
+        );
       }
 
-      this.logger.error({
-        method: 'login',
-        error: errorMessage,
-      });
-
-      throw new BadRequestException(errorMessage);
+      this.logger.error({ method: 'login', error: 'Invalid password' });
+      throw new BadRequestException(
+        `Invalid password. Number of remaining attempts: ${5 - failedAttempts}`,
+      );
     }
 
     // Reset all invalid attempts to 0 in case of a successful login
-    await this.resetFailedAttempts(userId);
+    await this.resetFailedAttempts(user.id);
 
     // Create new tokens
-    const tokens = await this.createTokensInTokenService(userId);
-
+    const tokens = await this.createTokensInTokenService(user.id);
     const roles = user.userRoles.map((userRole) => userRole.role.name);
     const userData: UserData = {
-      id: userId,
       roles,
+      id: user.id,
       email: user.email,
       phone: user.phone,
       activationLinkId: user.activationLinkId,
@@ -238,10 +218,7 @@ export class AuthService {
       isVerifiedEmail: user.isVerifiedEmail,
     };
 
-    return {
-      tokens,
-      user: userData,
-    };
+    return { tokens, user: userData };
   }
 
   async logout(userId: string) {
