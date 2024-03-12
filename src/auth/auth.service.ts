@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { Prisma, User } from '@prisma/client';
+import { Prisma, RoleType, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
@@ -162,8 +162,22 @@ export class AuthService {
       },
     });
 
-    // Validate user existence and active status
+    // Check the roles and if there's a 'Seller' in those roles
+    const roles: string[] = user.userRoles.map(
+      (userRole) => userRole.role.name,
+    );
+
+    if (!roles.some((role) => role === RoleType.Seller)) {
+      this.logger.error({
+        method: 'login',
+        error: 'This seller does not exist',
+      });
+
+      throw new NotFoundException('This seller does not exist, please sign up');
+    }
+
     if (!user) {
+      // Validate user existence and active status
       this.logger.error({ method: 'login', error: 'User not found' });
       throw new NotFoundException(
         'This user does not exist, please check the email you registered with',
@@ -207,7 +221,6 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(user.id);
-    const roles = user.userRoles.map((userRole) => userRole.role.name);
     const userData: UserData = {
       roles,
       id: user.id,
