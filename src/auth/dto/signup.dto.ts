@@ -1,4 +1,12 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { RoleType } from '@prisma/client';
+import {
+  IsDefined,
+  IsEmail,
+  IsString,
+  MinLength,
+  Validate,
+} from 'class-validator';
+import { IsValidRoleConstraint } from '../validators';
 
 export class SignupDto {
   @IsEmail()
@@ -15,4 +23,8 @@ export class SignupDto {
   @IsString()
   @MinLength(8)
   repeatedPassword: string;
+
+  @IsDefined()
+  @Validate(IsValidRoleConstraint)
+  role: RoleType;
 }

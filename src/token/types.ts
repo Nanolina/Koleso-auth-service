@@ -11,4 +11,5 @@ export type UserData = {
   activationLinkId: string;
   isActive: boolean;
   isVerifiedEmail: boolean;
+  roles: string[];
 };

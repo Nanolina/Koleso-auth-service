@@ -45,7 +45,7 @@ export class AuthService {
 
   async signup(dto: SignupDto): Promise<AuthResponse> {
     // Get data from dto
-    const { password, repeatedPassword, email, phone } = dto;
+    const { password, repeatedPassword, email, phone, role } = dto;
 
     // Password comparison
     if (password !== repeatedPassword) {
@@ -60,65 +60,87 @@ export class AuthService {
     // Create a UUID for a future activation link
     const activationLinkId = uuidv4();
 
-    // Create new user
-    let newUser;
     try {
-      newUser = await this.prisma.user.create({
-        data: {
+      const newUser = await this.prisma.user.upsert({
+        where: { email, phone },
+        update: {
+          userRoles: {
+            create: [
+              {
+                role: {
+                  connectOrCreate: {
+                    where: { name: role },
+                    create: { name: role },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        create: {
           email,
           phone,
           activationLinkId,
           password: hashedPassword,
+          userRoles: {
+            create: [
+              {
+                role: {
+                  connectOrCreate: {
+                    where: { name: role },
+                    create: { name: role },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        include: {
+          userRoles: {
+            include: {
+              role: true,
+            },
+          },
         },
       });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          this.logger.error({
-            method: 'signup',
-            error: 'A user with the same phone number or email already exists',
-          });
 
-          throw new BadRequestException(
-            'A user with the same phone number or email already exists',
-          );
-        }
+      const tokens = await this.createTokensInTokenService(newUser.id);
+      const roles = newUser.userRoles.map((userRole) => userRole.role.name);
+
+      const userCreatedEventData = {
+        roles,
+        activationLinkId,
+        id: newUser.id,
+        email: newUser.email,
+        phone: newUser.phone,
+        isActive: newUser.isActive,
+        isVerifiedEmail: newUser.isVerifiedEmail,
+      };
+
+      await this.client.emit('user_created', userCreatedEventData);
+      this.logger.log({ method: 'signup', log: 'user_created' });
+
+      return { tokens, user: userCreatedEventData };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const errorMessage =
+          'A user with the same phone number or email already exists';
+        this.logger.error({
+          method: 'signup',
+          error: errorMessage,
+        });
+        throw new BadRequestException(errorMessage);
       }
 
-      this.logger.error({ method: 'signup', error });
-
-      throw new InternalServerErrorException(
-        'Something went wrong, please check the data',
-      );
-    }
-
-    // Create new tokens
-    const tokens = await this.createTokensInTokenService(newUser.id);
-    const userData: UserData = {
-      activationLinkId,
-      id: newUser.id,
-      email: newUser.email,
-      phone: newUser.phone,
-      isActive: newUser.isActive,
-      isVerifiedEmail: newUser.isVerifiedEmail,
-    };
-
-    try {
-      await this.client.emit('user_created', {
-        id: newUser.id,
-        activationLinkId,
-        email: newUser.email,
+      this.logger.error({
+        method: 'signup',
+        error,
       });
-
-      this.logger.log({ method: 'signup', log: 'user_created' });
-    } catch (error) {
-      this.logger.error({ method: 'signup (user_created event)', error });
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
-
-    return {
-      tokens,
-      user: userData,
-    };
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
@@ -126,6 +148,17 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: {
         email: dto.email,
+      },
+      include: {
+        userRoles: {
+          include: {
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -193,8 +226,11 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
+
+    const roles = user.userRoles.map((userRole) => userRole.role.name);
     const userData: UserData = {
       id: userId,
+      roles,
       email: user.email,
       phone: user.phone,
       activationLinkId: user.activationLinkId,

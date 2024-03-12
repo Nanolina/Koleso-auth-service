@@ -178,6 +178,17 @@ export class TokenService {
       where: {
         id: tokenInfo.id || '',
       },
+      include: {
+        userRoles: {
+          include: {
+            role: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -210,8 +221,12 @@ export class TokenService {
     // Update refresh token in the DB
     await this.updateRefreshToken(userId, tokens.refreshToken);
 
+    const roles: string[] = user.userRoles.map(
+      (userRole) => userRole.role.name,
+    );
     const userData: UserData = {
       id: userId,
+      roles,
       email: user.email,
       phone: user.phone,
       activationLinkId: user.activationLinkId,

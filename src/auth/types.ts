@@ -13,6 +13,7 @@ export interface UserData extends UserDataSetNewPassword {
   phone: string;
   activationLinkId: string;
   isVerifiedEmail: boolean;
+  roles: string[];
 }
 
 export type AuthResponse = {
