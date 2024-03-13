@@ -5,6 +5,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
@@ -20,6 +21,7 @@ import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import {
   ChangeEmailDto,
   ChangeEmailServiceDto,
+  ChangePasswordServiceDto,
   ChangePhoneServiceDto,
   LoginDto,
   SetNewPasswordServiceDto,
@@ -302,6 +304,52 @@ export class AuthService {
 
       this.logger.error({ method: 'changePhone', error });
 
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
+    }
+  }
+
+  async changePassword(dto: ChangePasswordServiceDto): Promise<boolean> {
+    const { id, currentPassword, newPassword, repeatedPassword } = dto;
+
+    // Compare new password and repeated password
+    if (newPassword !== repeatedPassword) {
+      throw new UnauthorizedException(
+        'New password and repeated password do not match',
+      );
+    }
+
+    // Find a user
+    const existingUser = await this.prisma.user.findUnique({
+      where: { id },
+    });
+
+    // Compare the existing password in the DB with the one that came from user
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      existingUser.password,
+    );
+
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Hash the new password
+    const hashedNewPassword = await this.hashPassword(newPassword);
+
+    // Update the user's password
+    try {
+      await this.prisma.user.update({
+        where: {
+          id,
+        },
+        data: {
+          password: hashedNewPassword,
+        },
+      });
+
+      return true;
+    } catch (error) {
+      this.logger.error({ method: 'changePassword', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }

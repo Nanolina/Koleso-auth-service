@@ -21,6 +21,7 @@ import { PasswordResetTokenService } from './../password-reset-token/password-re
 import { AuthService } from './auth.service';
 import {
   ChangeEmailDto,
+  ChangePasswordDto,
   ChangePhoneDto,
   LoginDto,
   SetNewPasswordDto,
@@ -149,6 +150,18 @@ export class AuthController {
     return await this.authService.changePhone({
       id: req.user.id,
       phone: dto.phone,
+    });
+  }
+
+  @Patch('/change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @Req() req: Request,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<boolean> {
+    return await this.authService.changePassword({
+      id: req.user.id,
+      ...dto,
     });
   }
 
