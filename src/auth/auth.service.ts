@@ -51,8 +51,6 @@ export class AuthService {
 
     // Password comparison
     if (password !== repeatedPassword) {
-      this.logger.error({ method: 'signup', error: 'Passwords do not match' });
-
       throw new BadRequestException('Passwords do not match');
     }
 
@@ -106,13 +104,14 @@ export class AuthService {
         },
       });
 
-      const tokens = await this.createTokensInTokenService(newUser.id);
+      const newUserId = newUser.id;
+      const tokens = await this.createTokensInTokenService(newUserId);
       const roles = newUser.userRoles.map((userRole) => userRole.role.name);
 
       const userCreatedEventData = {
         roles,
         activationLinkId,
-        id: newUser.id,
+        id: newUserId,
         email: newUser.email,
         phone: newUser.phone,
         isActive: newUser.isActive,
@@ -120,7 +119,10 @@ export class AuthService {
       };
 
       await this.client.emit('user_created', userCreatedEventData);
-      this.logger.log({ method: 'signup', log: 'user_created' });
+      this.logger.log({
+        method: 'signup',
+        log: `user_created with id: ${newUserId}`,
+      });
 
       return { tokens, user: userCreatedEventData };
     } catch (error) {
@@ -130,10 +132,6 @@ export class AuthService {
       ) {
         const errorMessage =
           'A user with the same phone number or email already exists';
-        this.logger.error({
-          method: 'signup',
-          error: errorMessage,
-        });
         throw new BadRequestException(errorMessage);
       }
 
@@ -170,23 +168,16 @@ export class AuthService {
     );
 
     if (!roles.some((role) => role === RoleType.Seller)) {
-      this.logger.error({
-        method: 'login',
-        error: 'This seller does not exist',
-      });
-
       throw new NotFoundException('This seller does not exist, please sign up');
     }
 
+    // Validate user existence and active status
     if (!user) {
-      // Validate user existence and active status
-      this.logger.error({ method: 'login', error: 'User not found' });
       throw new NotFoundException(
         'This user does not exist, please check the email you registered with',
       );
     }
     if (!user.isActive) {
-      this.logger.error({ method: 'login', error: 'User is deactivated' });
       throw new ForbiddenException(
         'Your account has been locked. Please recover it by clicking on the "Forgot password" link',
       );
@@ -203,16 +194,11 @@ export class AuthService {
 
       if (failedAttempts >= 5) {
         await this.deactivateUser(user.id);
-        this.logger.error({
-          method: 'login',
-          error: 'Account locked due to too many failed attempts',
-        });
         throw new ForbiddenException(
           'Sorry, your account has been locked due to too many failed login attempts',
         );
       }
 
-      this.logger.error({ method: 'login', error: 'Invalid password' });
       throw new BadRequestException(
         `Invalid password. Number of remaining attempts: ${5 - failedAttempts}`,
       );
@@ -257,11 +243,6 @@ export class AuthService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          this.logger.error({
-            method: 'changeEmail',
-            error: 'A user with the same email already exists',
-          });
-
           throw new BadRequestException(
             'A user with the same email already exists',
           );
@@ -269,7 +250,6 @@ export class AuthService {
       }
 
       this.logger.error({ method: 'changeEmail', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -291,11 +271,6 @@ export class AuthService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
-          this.logger.error({
-            method: 'changePhone',
-            error: 'A user with the same phone already exists',
-          });
-
           throw new BadRequestException(
             'A user with the same phone already exists',
           );
@@ -303,7 +278,6 @@ export class AuthService {
       }
 
       this.logger.error({ method: 'changePhone', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -383,7 +357,7 @@ export class AuthService {
 
       this.logger.log({
         method: 'requestPasswordRecovery',
-        log: 'password_reset_requested',
+        log: `password_reset_requested with userId: ${userId}`,
       });
     } catch (error) {
       this.logger.error({
@@ -399,11 +373,6 @@ export class AuthService {
 
     // Password comparison
     if (password !== repeatedPassword) {
-      this.logger.error({
-        method: 'setNewPassword',
-        error: 'Passwords do not match',
-      });
-
       throw new BadRequestException('Passwords do not match');
     }
 
@@ -424,10 +393,7 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({ method: 'setNewPassword', error });
-
-      throw new InternalServerErrorException(
-        'Something went wrong, please check the data',
-      );
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
 
     // Create new tokens
@@ -449,7 +415,6 @@ export class AuthService {
       return await bcrypt.hash(password, rounds);
     } catch (error) {
       this.logger.error({ method: 'hashPassword', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -459,7 +424,6 @@ export class AuthService {
       return await bcrypt.compare(password, hashedPassword);
     } catch (error) {
       this.logger.error({ method: 'verifyPassword', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -476,7 +440,6 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({ method: 'updateFailedAttempts', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -491,9 +454,8 @@ export class AuthService {
     if (!user) {
       this.logger.error({
         method: 'activateUser',
-        error: 'User not found by activation link ID',
+        error: `User not found by activationLinkId: ${activationLinkId}`,
       });
-
       throw new NotFoundException(UNKNOWN_ERROR_TRY);
     }
 
@@ -508,7 +470,6 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({ method: 'activateUser', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -526,7 +487,6 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({ method: 'deactivateUser', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }

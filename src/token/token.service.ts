@@ -107,7 +107,6 @@ export class TokenService {
       });
     } catch (error) {
       this.logger.error({ method: 'updateRefreshToken', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -156,7 +155,6 @@ export class TokenService {
       };
     } catch (error) {
       this.logger.error({ method: 'createTokens', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -249,7 +247,6 @@ export class TokenService {
       });
     } catch (error) {
       this.logger.error({ method: 'removeToken', error });
-
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }

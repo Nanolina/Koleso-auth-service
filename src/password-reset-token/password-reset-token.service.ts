@@ -53,11 +53,6 @@ export class PasswordResetTokenService {
     });
 
     if (!tokenFromDB) {
-      this.logger.error({
-        method: 'verifyToken',
-        error: 'Password reset token not found or out of date',
-      });
-
       throw new NotFoundException('Invalid password reset link');
     }
 
