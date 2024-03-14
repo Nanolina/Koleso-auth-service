@@ -27,6 +27,7 @@ import {
   SetNewPasswordDto,
   SignupDto,
 } from './dto';
+import { ChangeEmailResponse } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -134,7 +135,7 @@ export class AuthController {
   async changeEmail(
     @Req() req: Request,
     @Body() dto: ChangeEmailDto,
-  ): Promise<ChangeEmailDto> {
+  ): Promise<ChangeEmailResponse> {
     return await this.authService.changeEmail({
       id: req.user.id,
       email: dto.email,

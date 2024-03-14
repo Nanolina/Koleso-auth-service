@@ -20,3 +20,9 @@ export type AuthResponse = {
   tokens: Tokens;
   user: UserData;
 };
+
+export type ChangeEmailResponse = {
+  email: string;
+  activationLinkId: string;
+  isVerifiedEmail: boolean;
+};

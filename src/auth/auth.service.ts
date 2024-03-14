@@ -121,7 +121,7 @@ export class AuthService {
       await this.client.emit('user_created', userCreatedEventData);
       this.logger.log({
         method: 'signup',
-        log: `user_created with id: ${newUserId}`,
+        log: `user_created event published with id: ${newUserId}`,
       });
 
       return { tokens, user: userCreatedEventData };
@@ -228,17 +228,37 @@ export class AuthService {
 
   async changeEmail(dto: ChangeEmailServiceDto) {
     try {
+      const activationLinkId = uuidv4();
+
       const user = await this.prisma.user.update({
         where: {
           id: dto.id,
         },
         data: {
+          activationLinkId,
           email: dto.email,
+          isVerifiedEmail: false,
         },
       });
 
-      return {
+      const userId = user.id;
+      const data = {
+        activationLinkId,
         email: user.email,
+      };
+
+      await this.client.emit('email_changed', {
+        id: userId,
+        ...data,
+      });
+      this.logger.log({
+        method: 'changeEmail',
+        log: `email_changed event published with id: ${userId}`,
+      });
+
+      return {
+        isVerifiedEmail: user.isVerifiedEmail,
+        ...data,
       };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -357,7 +377,7 @@ export class AuthService {
 
       this.logger.log({
         method: 'requestPasswordRecovery',
-        log: `password_reset_requested with userId: ${userId}`,
+        log: `password_reset_requested event published with userId: ${userId}`,
       });
     } catch (error) {
       this.logger.error({
