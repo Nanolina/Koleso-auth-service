@@ -163,11 +163,11 @@ export class AuthService {
     });
 
     // Check the roles and if there's a 'Seller' in those roles
-    const roles: string[] = user.userRoles.map(
+    const roles: string[] = user?.userRoles?.map(
       (userRole) => userRole.role.name,
     );
 
-    if (!roles.some((role) => role === RoleType.Seller)) {
+    if (!roles?.some((role) => role === RoleType.Seller)) {
       throw new NotFoundException('This seller does not exist, please sign up');
     }
 
