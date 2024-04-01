@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -12,6 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { RoleType } from '@prisma/client';
 import { Request, Response } from 'express';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
@@ -123,11 +125,24 @@ export class AuthController {
     @Param('activationLinkId') activationLinkId: string,
     @Res() res: Response,
   ) {
-    await this.authService.verifyEmail(activationLinkId);
+    const user = await this.authService.verifyEmail(activationLinkId);
+    const sellerInterface = this.configService.get<string>(
+      'SELLER_INTERFACE_URL',
+    );
+    const customerInterface = this.configService.get<string>(
+      'CUSTOMER_INTERFACE_URL',
+    );
+    const roles: string[] = user?.userRoles?.map(
+      (userRole) => userRole.role.name,
+    );
 
-    const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
+    if (roles?.includes(RoleType.Seller)) {
+      return res.redirect(sellerInterface);
+    } else if (roles?.includes(RoleType.Customer)) {
+      return res.redirect(customerInterface);
+    }
 
-    res.redirect(interfaceURL);
+    throw new BadRequestException('Invalid user role');
   }
 
   @Patch('/change-email')

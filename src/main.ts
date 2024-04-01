@@ -14,7 +14,10 @@ async function bootstrap() {
   // Cors
   app.use(
     cors({
-      origin: configService.get<string>('SELLER_INTERFACE_URL'),
+      origin: [
+        configService.get<string>('SELLER_INTERFACE_URL'),
+        configService.get<string>('CUSTOMER_INTERFACE_URL'),
+      ],
       credentials: true,
     }),
   );

@@ -480,9 +480,20 @@ export class AuthService {
     }
 
     try {
-      await this.prisma.user.update({
+      return await this.prisma.user.update({
         where: {
           id: user.id,
+        },
+        include: {
+          userRoles: {
+            include: {
+              role: {
+                select: {
+                  name: true,
+                },
+              },
+            },
+          },
         },
         data: {
           isVerifiedEmail: true,
