@@ -16,6 +16,7 @@ import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
 import { PasswordResetTokenService } from '../password-reset-token/password-reset-token.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { TokenService } from '../token/token.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import {
@@ -41,6 +42,7 @@ export class AuthService {
     private tokenService: TokenService,
     private passwordResetTokenService: PasswordResetTokenService,
     private configService: ConfigService,
+    private rabbitMQService: RabbitMQService,
     private readonly logger: MyLogger,
     @Inject('AUTH_CLIENT') private readonly client: ClientProxy,
   ) {}
@@ -82,9 +84,16 @@ export class AuthService {
         id: newUserId,
         isActive: newUser.isActive,
         isVerifiedEmail: newUser.isVerifiedEmail,
+        eventType: 'user_created',
       };
 
-      await this.client.emit('user_created', userCreatedEventData);
+      const exchange = this.configService.get<string>('RABBITMQ_AUTH_EXCHANGE');
+      await this.rabbitMQService.publishToExchange(
+        'fanout',
+        'user_created',
+        userCreatedEventData,
+        exchange,
+      );
       this.logger.log({
         method: 'signup',
         log: `user_created event published with id: ${newUserId}`,

@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { AtGuard } from './common/guards';
 import { PasswordResetTokenModule } from './password-reset-token/password-reset-token.module';
 import { PrismaService } from './prisma/prisma.service';
+import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { TokenModule } from './token/token.module';
 
 @Module({
@@ -12,6 +13,7 @@ import { TokenModule } from './token/token.module';
     AuthModule,
     TokenModule,
     PasswordResetTokenModule,
+    RabbitMQModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
