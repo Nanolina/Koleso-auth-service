@@ -2,5 +2,5 @@
   "watch": ["src"],
   "ext": "ts",
   "ignore": ["src/**/*.spec.ts"],
-  "exec": "npm run build && node dist/src/main"
+  "exec": "npm run build && node dist/main"
 }
