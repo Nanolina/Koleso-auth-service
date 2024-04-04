@@ -1,3 +1,5 @@
+import { RoleType } from '@prisma/client';
+
 export type JWTInfo = {
   id: string;
   iat: number;
@@ -11,5 +13,5 @@ export type UserData = {
   activationLinkId: string;
   isActive: boolean;
   isVerifiedEmail: boolean;
-  roles: string[];
+  role: RoleType;
 };

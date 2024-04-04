@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { Prisma, RoleType, User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
@@ -61,59 +61,25 @@ export class AuthService {
     const activationLinkId = uuidv4();
 
     try {
-      const newUser = await this.prisma.user.upsert({
-        where: { email, phone },
-        update: {
-          userRoles: {
-            create: [
-              {
-                role: {
-                  connectOrCreate: {
-                    where: { name: role },
-                    create: { name: role },
-                  },
-                },
-              },
-            ],
-          },
-        },
-        create: {
+      const newUser = await this.prisma.user.create({
+        data: {
           email,
           phone,
+          role,
           activationLinkId,
           password: hashedPassword,
-          userRoles: {
-            create: [
-              {
-                role: {
-                  connectOrCreate: {
-                    where: { name: role },
-                    create: { name: role },
-                  },
-                },
-              },
-            ],
-          },
-        },
-        include: {
-          userRoles: {
-            include: {
-              role: true,
-            },
-          },
         },
       });
 
       const newUserId = newUser.id;
       const tokens = await this.createTokensInTokenService(newUserId);
-      const roles = newUser.userRoles.map((userRole) => userRole.role.name);
 
       const userCreatedEventData = {
-        roles,
+        email,
+        phone,
+        role,
         activationLinkId,
         id: newUserId,
-        email: newUser.email,
-        phone: newUser.phone,
         isActive: newUser.isActive,
         isVerifiedEmail: newUser.isVerifiedEmail,
       };
@@ -130,8 +96,7 @@ export class AuthService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
-        const errorMessage =
-          'A user with the same phone number or email already exists';
+        const errorMessage = 'A user with the same email already exists';
         throw new BadRequestException(errorMessage);
       }
 
@@ -149,27 +114,7 @@ export class AuthService {
       where: {
         email: dto.email,
       },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
     });
-
-    // Check the roles and if there's a 'Seller' in those roles
-    const roles: string[] = user?.userRoles?.map(
-      (userRole) => userRole.role.name,
-    );
-
-    if (!roles?.some((role) => role === RoleType.Seller)) {
-      throw new NotFoundException('This seller does not exist, please sign up');
-    }
 
     // Validate user existence and active status
     if (!user) {
@@ -209,14 +154,24 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(user.id);
+    const {
+      role,
+      id,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
+    } = user;
+
     const userData: UserData = {
-      roles,
-      id: user.id,
-      email: user.email,
-      phone: user.phone,
-      activationLinkId: user.activationLinkId,
-      isActive: user.isActive,
-      isVerifiedEmail: user.isVerifiedEmail,
+      id,
+      role,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
     };
 
     return { tokens, user: userData };
@@ -483,17 +438,6 @@ export class AuthService {
       return await this.prisma.user.update({
         where: {
           id: user.id,
-        },
-        include: {
-          userRoles: {
-            include: {
-              role: {
-                select: {
-                  name: true,
-                },
-              },
-            },
-          },
         },
         data: {
           isVerifiedEmail: true,

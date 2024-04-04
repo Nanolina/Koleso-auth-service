@@ -176,17 +176,6 @@ export class TokenService {
       where: {
         id: tokenInfo.id || '',
       },
-      include: {
-        userRoles: {
-          include: {
-            role: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
     });
 
     if (!user) {
@@ -198,14 +187,22 @@ export class TokenService {
       throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
-    const userId: string = user.id;
+    const {
+      id,
+      role,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
+    } = user;
 
     /**
      * Check if this user has this token in the DB
      * If the token is not found or is empty,
      * the method will throw an error
      */
-    const tokenFromDB = await this.findToken(userId);
+    const tokenFromDB = await this.findToken(id);
     /**
      * Check if refresh token in the cookie and in the database are equal
      * If the tokens are not equal,
@@ -214,22 +211,19 @@ export class TokenService {
     await this.isRefreshTokenMatches(refreshToken, tokenFromDB.token);
 
     // Create new tokens
-    const tokens = await this.createTokens(userId);
+    const tokens = await this.createTokens(id);
 
     // Update refresh token in the DB
-    await this.updateRefreshToken(userId, tokens.refreshToken);
+    await this.updateRefreshToken(id, tokens.refreshToken);
 
-    const roles: string[] = user.userRoles.map(
-      (userRole) => userRole.role.name,
-    );
     const userData: UserData = {
-      id: userId,
-      roles,
-      email: user.email,
-      phone: user.phone,
-      activationLinkId: user.activationLinkId,
-      isActive: user.isActive,
-      isVerifiedEmail: user.isVerifiedEmail,
+      id,
+      role,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
     };
 
     return {

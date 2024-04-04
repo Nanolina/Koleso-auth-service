@@ -1,3 +1,5 @@
+import { RoleType } from '@prisma/client';
+
 export type Tokens = {
   accessToken: string;
   refreshToken: string;
@@ -11,9 +13,9 @@ export interface UserData extends UserDataSetNewPassword {
   id: string;
   email: string;
   phone: string;
+  role: RoleType;
   activationLinkId: string;
   isVerifiedEmail: boolean;
-  roles: string[];
 }
 
 export type AuthResponse = {

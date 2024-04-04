@@ -119,26 +119,24 @@ export class AuthController {
   }
 
   @Public()
-  @Get('/activate/:activationLinkId')
+  @Get('/activate/:activationLinkId/:role')
   @HttpCode(HttpStatus.OK)
   async verifyEmail(
     @Param('activationLinkId') activationLinkId: string,
+    @Param('role') role: string,
     @Res() res: Response,
   ) {
-    const user = await this.authService.verifyEmail(activationLinkId);
+    await this.authService.verifyEmail(activationLinkId);
     const sellerInterface = this.configService.get<string>(
       'SELLER_INTERFACE_URL',
     );
     const customerInterface = this.configService.get<string>(
       'CUSTOMER_INTERFACE_URL',
     );
-    const roles: string[] = user?.userRoles?.map(
-      (userRole) => userRole.role.name,
-    );
 
-    if (roles?.includes(RoleType.Seller)) {
+    if (role === RoleType.Seller) {
       return res.redirect(sellerInterface);
-    } else if (roles?.includes(RoleType.Customer)) {
+    } else if (role === RoleType.Customer) {
       return res.redirect(customerInterface);
     }
 
