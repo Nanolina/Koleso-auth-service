@@ -17,7 +17,7 @@ import { AuthService } from './auth.service';
     PasswordResetTokenModule,
     ClientsModule.registerAsync([
       {
-        name: 'AUTH_CLIENT',
+        name: 'AUTH_FANOUT_CLIENT',
         inject: [ConfigService],
         useFactory: (configService: ConfigService) => ({
           transport: Transport.RMQ,
@@ -25,6 +25,21 @@ import { AuthService } from './auth.service';
             urls: [configService.get<string>('RABBITMQ_URL')],
             exchange: configService.get<string>('RABBITMQ_AUTH_EXCHANGE'),
             exchangeType: 'fanout',
+          },
+        }),
+      },
+      {
+        name: 'AUTH_CLIENT',
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL')],
+            queue: configService.get<string>('RABBITMQ_AUTH_QUEUE'),
+            queueOptions: {
+              durable: true,
+              exclusive: false,
+            },
           },
         }),
       },

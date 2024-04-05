@@ -28,12 +28,7 @@ import {
   SetNewPasswordServiceDto,
   SignupDto,
 } from './dto';
-import {
-  AuthResponse,
-  Tokens,
-  UserData,
-  UserDataSetNewPassword,
-} from './types';
+import { AuthResponse, Tokens, UserData } from './types';
 
 @Injectable()
 export class AuthService {
@@ -213,6 +208,7 @@ export class AuthService {
 
       await this.client.emit('email_changed', {
         id: userId,
+        role: user.role,
         ...data,
       });
       this.logger.log({
@@ -382,8 +378,24 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
-    const userData: UserDataSetNewPassword = {
-      isActive: user.isActive,
+    const {
+      role,
+      id,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
+    } = user;
+
+    const userData: UserData = {
+      id,
+      role,
+      email,
+      phone,
+      activationLinkId,
+      isActive,
+      isVerifiedEmail,
     };
 
     return {
