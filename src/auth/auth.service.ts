@@ -333,6 +333,7 @@ export class AuthService {
         userId,
         email,
         passwordResetToken,
+        role: user.role,
       });
 
       this.logger.log({

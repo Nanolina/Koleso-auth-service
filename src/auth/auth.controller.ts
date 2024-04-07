@@ -120,7 +120,7 @@ export class AuthController {
 
   @Public()
   @Get('/activate/:activationLinkId/:role')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.TEMPORARY_REDIRECT)
   async verifyEmail(
     @Param('activationLinkId') activationLinkId: string,
     @Param('role') role: string,
@@ -189,11 +189,12 @@ export class AuthController {
   }
 
   @Public()
-  @Get('/password/reset/:userId/:passwordResetToken')
-  @HttpCode(HttpStatus.OK)
+  @Get('/password/reset/:userId/:passwordResetToken/:role')
+  @HttpCode(HttpStatus.TEMPORARY_REDIRECT)
   async resetPassword(
     @Param('userId') userId: string,
     @Param('passwordResetToken') passwordResetToken: string,
+    @Param('role') role: string,
     @Res() res: Response,
   ) {
     await this.passwordResetTokenService.verifyAndDelete(
@@ -201,10 +202,23 @@ export class AuthController {
       userId,
     );
 
-    const interfaceURL = this.configService.get<string>('SELLER_INTERFACE_URL');
-    const setNewPasswordURL = `${interfaceURL}/password/set/${userId}`;
+    const setNewPasswordURL = (interfaceURL: string) =>
+      `${interfaceURL}/password/set/${userId}`;
 
-    res.redirect(setNewPasswordURL);
+    const sellerInterface = this.configService.get<string>(
+      'SELLER_INTERFACE_URL',
+    );
+    const customerInterface = this.configService.get<string>(
+      'CUSTOMER_INTERFACE_URL',
+    );
+
+    if (role === RoleType.Seller) {
+      return res.redirect(setNewPasswordURL(sellerInterface));
+    } else if (role === RoleType.Customer) {
+      return res.redirect(setNewPasswordURL(customerInterface));
+    }
+
+    throw new BadRequestException('Invalid user role');
   }
 
   @Public()
