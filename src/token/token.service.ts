@@ -37,7 +37,7 @@ export class TokenService {
     const result: boolean = this.hashToken(token) === hashedToken;
     if (!result) {
       this.logger.error({
-        method: 'isRefreshTokenMatches',
+        method: 'token-isRefreshTokenMatches',
         error: 'The tokens do not match',
       });
 
@@ -53,7 +53,7 @@ export class TokenService {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch (error) {
-      this.logger.error({ method: 'validateRefreshToken', error });
+      this.logger.error({ method: 'token-validateRefreshToken', error });
 
       return null;
     }
@@ -69,7 +69,7 @@ export class TokenService {
 
     if (!tokenFromDB || !tokenFromDB.token) {
       this.logger.error({
-        method: 'findToken',
+        method: 'token-findToken',
         error: 'Token not found',
       });
 
@@ -106,7 +106,7 @@ export class TokenService {
         },
       });
     } catch (error) {
-      this.logger.error({ method: 'updateRefreshToken', error });
+      this.logger.error({ method: 'token-updateRefreshToken', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -154,7 +154,7 @@ export class TokenService {
         refreshToken: refreshToken,
       };
     } catch (error) {
-      this.logger.error({ method: 'createTokens', error });
+      this.logger.error({ method: 'token-createTokens', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -164,7 +164,7 @@ export class TokenService {
 
     if (!tokenInfo) {
       this.logger.error({
-        method: 'refreshTokens',
+        method: 'token-refreshTokens',
         error: 'Failed to validate refresh token',
       });
 
@@ -180,22 +180,14 @@ export class TokenService {
 
     if (!user) {
       this.logger.error({
-        method: 'refreshTokens',
+        method: 'token-refreshTokens',
         error: 'User not found with token',
       });
 
       throw new UnauthorizedException(UNKNOWN_ERROR);
     }
 
-    const {
-      id,
-      role,
-      email,
-      phone,
-      activationLinkId,
-      isActive,
-      isVerifiedEmail,
-    } = user;
+    const { id, role, email, phone, isActive, isVerifiedEmail } = user;
 
     /**
      * Check if this user has this token in the DB
@@ -221,7 +213,6 @@ export class TokenService {
       role,
       email,
       phone,
-      activationLinkId,
       isActive,
       isVerifiedEmail,
     };
@@ -240,7 +231,7 @@ export class TokenService {
         },
       });
     } catch (error) {
-      this.logger.error({ method: 'removeToken', error });
+      this.logger.error({ method: 'token-removeToken', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }

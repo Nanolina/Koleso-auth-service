@@ -10,3 +10,4 @@ export {
   SetNewPasswordServiceDto,
 } from './set-new-password.dto';
 export { SignupDto } from './signup.dto';
+export { VerifyCodeDto } from './verify-code.dto';

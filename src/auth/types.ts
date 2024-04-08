@@ -14,7 +14,6 @@ export interface UserData extends UserDataSetNewPassword {
   email: string;
   phone: string;
   role: RoleType;
-  activationLinkId: string;
   isVerifiedEmail: boolean;
 }
 
@@ -25,6 +24,9 @@ export type AuthResponse = {
 
 export type ChangeEmailResponse = {
   email: string;
-  activationLinkId: string;
+  isVerifiedEmail: boolean;
+};
+
+export type VerifyConfirmationCodeResponse = {
   isVerifiedEmail: boolean;
 };

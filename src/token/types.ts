@@ -10,7 +10,6 @@ export type UserData = {
   id: string;
   email: string;
   phone: string;
-  activationLinkId: string;
   isActive: boolean;
   isVerifiedEmail: boolean;
   role: RoleType;

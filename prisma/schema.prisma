@@ -9,21 +9,20 @@ datasource db {
 }
 
 model User {
-  id                  String               @id @default(uuid())
-  email               String               @unique
-  phone               String               @db.VarChar(20)
-  isActive            Boolean              @default(true)
-  deactivationDate    DateTime?
-  activationLinkId    String?
-  password            String
-  failedAttempts      Int                  @default(0)
-  isVerifiedEmail     Boolean              @default(false)
-  isVerifiedPhone     Boolean              @default(false)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @default(now())
-  role                RoleType
-  passwordResetTokens PasswordResetToken[]
-  token               Token?
+  id                String             @id @default(uuid())
+  email             String             @unique
+  phone             String             @db.VarChar(20)
+  isActive          Boolean            @default(true)
+  deactivationDate  DateTime?
+  password          String
+  failedAttempts    Int                @default(0)
+  isVerifiedEmail   Boolean            @default(false)
+  isVerifiedPhone   Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now())
+  role              RoleType
+  token             Token?
+  verificationCodes VerificationCode[]
 }
 
 model Token {
@@ -35,10 +34,11 @@ model Token {
   user      User     @relation(fields: [userId], references: [id])
 }
 
-model PasswordResetToken {
+model VerificationCode {
   id        String   @id @default(uuid())
   userId    String
-  token     String   @unique
+  codeType  CodeType
+  code      Int
   createdAt DateTime @default(now())
   expiresAt DateTime
   user      User     @relation(fields: [userId], references: [id])
@@ -47,4 +47,10 @@ model PasswordResetToken {
 enum RoleType {
   Customer
   Seller
+}
+
+enum CodeType {
+  EMAIL_CONFIRMATION
+  PHONE_CONFIRMATION
+  PASSWORD_RESET
 }

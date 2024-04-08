@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -13,13 +12,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { RoleType } from '@prisma/client';
 import { Request, Response } from 'express';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
 import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
-import { PasswordResetTokenService } from './../password-reset-token/password-reset-token.service';
+import { VerificationCodeService } from '../verification-code/verification-code.service';
 import { AuthService } from './auth.service';
 import {
   ChangeEmailDto,
@@ -28,8 +26,9 @@ import {
   LoginDto,
   SetNewPasswordDto,
   SignupDto,
+  VerifyCodeDto,
 } from './dto';
-import { ChangeEmailResponse } from './types';
+import { ChangeEmailResponse, VerifyConfirmationCodeResponse } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -37,7 +36,7 @@ export class AuthController {
     private authService: AuthService,
     private tokenService: TokenService,
     private configService: ConfigService,
-    private passwordResetTokenService: PasswordResetTokenService,
+    private verificationCodeService: VerificationCodeService,
     private readonly logger: MyLogger,
   ) {}
 
@@ -98,7 +97,7 @@ export class AuthController {
 
     if (!refreshToken) {
       this.logger.error({
-        method: 'refreshTokens',
+        method: 'auth-refreshTokens',
         error: 'The token has not been transferred',
       });
 
@@ -118,29 +117,35 @@ export class AuthController {
     });
   }
 
-  @Public()
-  @Get('/activate/:activationLinkId/:role')
-  @HttpCode(HttpStatus.TEMPORARY_REDIRECT)
-  async verifyEmail(
-    @Param('activationLinkId') activationLinkId: string,
-    @Param('role') role: string,
-    @Res() res: Response,
-  ) {
-    await this.authService.verifyEmail(activationLinkId);
-    const sellerInterface = this.configService.get<string>(
-      'SELLER_INTERFACE_URL',
-    );
-    const customerInterface = this.configService.get<string>(
-      'CUSTOMER_INTERFACE_URL',
-    );
+  @Post('/verify-confirmation-code')
+  @HttpCode(HttpStatus.OK)
+  async verifyConfirmationCode(
+    @Req() req: Request,
+    @Body() dto: VerifyCodeDto,
+  ): Promise<VerifyConfirmationCodeResponse> {
+    const userId = req.user.id;
+    const codeType = dto.codeType;
+    await this.verificationCodeService.verify(dto.code, userId, codeType);
 
-    if (role === RoleType.Seller) {
-      return res.redirect(sellerInterface);
-    } else if (role === RoleType.Customer) {
-      return res.redirect(customerInterface);
+    switch (codeType) {
+      case 'EMAIL_CONFIRMATION':
+        return await this.authService.toggleIsVerifiedEmail(userId);
+      case 'PHONE_CONFIRMATION':
+      // return await this.authService.toggleIsVerifiedPhone(userId);
+      default:
+        return { isVerifiedEmail: false };
     }
+  }
 
-    throw new BadRequestException('Invalid user role');
+  @Public()
+  @Post('/verify-password-reset-code')
+  @HttpCode(HttpStatus.OK)
+  async verifyPasswordResetCode(@Body() dto: VerifyCodeDto): Promise<void> {
+    return await this.verificationCodeService.verify(
+      dto.code,
+      undefined,
+      'PASSWORD_RESET',
+    );
   }
 
   @Patch('/change-email')
@@ -186,39 +191,6 @@ export class AuthController {
     return await this.authService.requestPasswordRecovery({
       email: dto.email,
     });
-  }
-
-  @Public()
-  @Get('/password/reset/:userId/:passwordResetToken/:role')
-  @HttpCode(HttpStatus.TEMPORARY_REDIRECT)
-  async resetPassword(
-    @Param('userId') userId: string,
-    @Param('passwordResetToken') passwordResetToken: string,
-    @Param('role') role: string,
-    @Res() res: Response,
-  ) {
-    await this.passwordResetTokenService.verifyAndDelete(
-      passwordResetToken,
-      userId,
-    );
-
-    const setNewPasswordURL = (interfaceURL: string) =>
-      `${interfaceURL}/password/set/${userId}`;
-
-    const sellerInterface = this.configService.get<string>(
-      'SELLER_INTERFACE_URL',
-    );
-    const customerInterface = this.configService.get<string>(
-      'CUSTOMER_INTERFACE_URL',
-    );
-
-    if (role === RoleType.Seller) {
-      return res.redirect(setNewPasswordURL(sellerInterface));
-    } else if (role === RoleType.Customer) {
-      return res.redirect(setNewPasswordURL(customerInterface));
-    }
-
-    throw new BadRequestException('Invalid user role');
   }
 
   @Public()

@@ -1,6 +1,9 @@
 -- CreateEnum
 CREATE TYPE "RoleType" AS ENUM ('Customer', 'Seller');
 
+-- CreateEnum
+CREATE TYPE "CodeType" AS ENUM ('EMAIL_CONFIRMATION', 'PHONE_CONFIRMATION', 'PASSWORD_RESET');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -8,7 +11,6 @@ CREATE TABLE "User" (
     "phone" VARCHAR(20) NOT NULL,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "deactivationDate" TIMESTAMP(3),
-    "activationLinkId" TEXT,
     "password" TEXT NOT NULL,
     "failedAttempts" INTEGER NOT NULL DEFAULT 0,
     "isVerifiedEmail" BOOLEAN NOT NULL DEFAULT false,
@@ -32,14 +34,15 @@ CREATE TABLE "Token" (
 );
 
 -- CreateTable
-CREATE TABLE "PasswordResetToken" (
+CREATE TABLE "VerificationCode" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "token" TEXT NOT NULL,
+    "codeType" "CodeType" NOT NULL,
+    "code" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "PasswordResetToken_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "VerificationCode_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -51,11 +54,8 @@ CREATE UNIQUE INDEX "Token_userId_key" ON "Token"("userId");
 -- CreateIndex
 CREATE UNIQUE INDEX "Token_token_key" ON "Token"("token");
 
--- CreateIndex
-CREATE UNIQUE INDEX "PasswordResetToken_token_key" ON "PasswordResetToken"("token");
-
 -- AddForeignKey
 ALTER TABLE "Token" ADD CONSTRAINT "Token_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PasswordResetToken" ADD CONSTRAINT "PasswordResetToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "VerificationCode" ADD CONSTRAINT "VerificationCode_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

@@ -3,16 +3,16 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { AtGuard } from './common/guards';
-import { PasswordResetTokenModule } from './password-reset-token/password-reset-token.module';
 import { PrismaService } from './prisma/prisma.service';
 import { RabbitMQModule } from './rabbitmq/rabbitmq.module';
 import { TokenModule } from './token/token.module';
+import { VerificationCodeModule } from './verification-code/verification-code.module';
 
 @Module({
   imports: [
     AuthModule,
     TokenModule,
-    PasswordResetTokenModule,
+    VerificationCodeModule,
     RabbitMQModule,
     ConfigModule.forRoot({
       isGlobal: true,

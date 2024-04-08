@@ -11,13 +11,12 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
-import { PasswordResetTokenService } from '../password-reset-token/password-reset-token.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { TokenService } from '../token/token.service';
+import { VerificationCodeService } from '../verification-code/verification-code.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import {
   ChangeEmailDto,
@@ -35,7 +34,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private tokenService: TokenService,
-    private passwordResetTokenService: PasswordResetTokenService,
+    private verificationCodeService: VerificationCodeService,
     private configService: ConfigService,
     private rabbitMQService: RabbitMQService,
     private readonly logger: MyLogger,
@@ -54,39 +53,41 @@ export class AuthService {
     // Hash the password
     const hashedPassword = await this.hashPassword(password);
 
-    // Create a UUID for a future activation link
-    const activationLinkId = uuidv4();
-
     try {
       const newUser = await this.prisma.user.create({
         data: {
           email,
           phone,
           role,
-          activationLinkId,
           password: hashedPassword,
         },
       });
 
       const newUserId = newUser.id;
+
+      // Generate verification code for email confirmation
+      const verificationCodeEmail = await this.verificationCodeService.create(
+        newUserId,
+        'EMAIL_CONFIRMATION',
+      );
+
       const tokens = await this.createTokensInTokenService(newUserId);
+      const eventType: string = 'user_created';
 
       const userCreatedEventData = {
         email,
-        phone,
-        role,
-        activationLinkId,
+        eventType,
         id: newUserId,
-        isActive: newUser.isActive,
-        isVerifiedEmail: newUser.isVerifiedEmail,
-        eventType: 'user_created',
       };
 
       const exchange = this.configService.get<string>('RABBITMQ_AUTH_EXCHANGE');
       await this.rabbitMQService.publishToExchange(
         'fanout',
-        'user_created',
-        userCreatedEventData,
+        eventType,
+        {
+          verificationCodeEmail,
+          ...userCreatedEventData,
+        },
         exchange,
       );
       this.logger.log({
@@ -94,7 +95,16 @@ export class AuthService {
         log: `user_created event published with id: ${newUserId}`,
       });
 
-      return { tokens, user: userCreatedEventData };
+      return {
+        tokens,
+        user: {
+          phone,
+          role,
+          isActive: newUser.isActive,
+          isVerifiedEmail: newUser.isVerifiedEmail,
+          ...userCreatedEventData,
+        },
+      };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -105,7 +115,7 @@ export class AuthService {
       }
 
       this.logger.error({
-        method: 'signup',
+        method: 'auth-signup',
         error,
       });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
@@ -158,22 +168,13 @@ export class AuthService {
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(user.id);
-    const {
-      role,
-      id,
-      email,
-      phone,
-      activationLinkId,
-      isActive,
-      isVerifiedEmail,
-    } = user;
+    const { role, id, email, phone, isActive, isVerifiedEmail } = user;
 
     const userData: UserData = {
       id,
       role,
       email,
       phone,
-      activationLinkId,
       isActive,
       isVerifiedEmail,
     };
@@ -187,28 +188,31 @@ export class AuthService {
 
   async changeEmail(dto: ChangeEmailServiceDto) {
     try {
-      const activationLinkId = uuidv4();
-
+      const email = dto.email;
       const user = await this.prisma.user.update({
         where: {
           id: dto.id,
         },
         data: {
-          activationLinkId,
-          email: dto.email,
+          email,
           isVerifiedEmail: false,
         },
       });
 
       const userId = user.id;
       const data = {
-        activationLinkId,
-        email: user.email,
+        email,
       };
 
+      // Generate verification code for email confirmation
+      const verificationCodeEmail = await this.verificationCodeService.create(
+        userId,
+        'EMAIL_CONFIRMATION',
+      );
+
       await this.client.emit('email_changed', {
+        verificationCodeEmail,
         id: userId,
-        role: user.role,
         ...data,
       });
       this.logger.log({
@@ -229,7 +233,7 @@ export class AuthService {
         }
       }
 
-      this.logger.error({ method: 'changeEmail', error });
+      this.logger.error({ method: 'auth-changeEmail', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -257,7 +261,7 @@ export class AuthService {
         }
       }
 
-      this.logger.error({ method: 'changePhone', error });
+      this.logger.error({ method: 'auth-changePhone', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -303,7 +307,7 @@ export class AuthService {
 
       return true;
     } catch (error) {
-      this.logger.error({ method: 'changePassword', error });
+      this.logger.error({ method: 'auth-changePassword', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -323,17 +327,18 @@ export class AuthService {
 
     const userId = user.id;
 
-    // Create a password reset token in the database
-    const { passwordResetToken } =
-      await this.passwordResetTokenService.create(userId);
+    // Generate verification code for reset password
+    const verificationCodeEmail = await this.verificationCodeService.create(
+      userId,
+      'PASSWORD_RESET',
+    );
 
-    // Create an event for notification-service to subscribe and send the link to email
+    // Create an event for notification-service to send the verification code
     try {
       await this.client.emit('password_reset_requested', {
-        userId,
         email,
-        passwordResetToken,
-        role: user.role,
+        verificationCodeEmail,
+        id: userId,
       });
 
       this.logger.log({
@@ -342,7 +347,7 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({
-        method: 'requestPasswordRecovery (password_reset_requested event)',
+        method: 'auth-requestPasswordRecovery (password_reset_requested event)',
         error,
       });
     }
@@ -373,28 +378,19 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error({ method: 'setNewPassword', error });
+      this.logger.error({ method: 'auth-setNewPassword', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
 
     // Create new tokens
     const tokens = await this.createTokensInTokenService(userId);
-    const {
-      role,
-      id,
-      email,
-      phone,
-      activationLinkId,
-      isActive,
-      isVerifiedEmail,
-    } = user;
+    const { role, id, email, phone, isActive, isVerifiedEmail } = user;
 
     const userData: UserData = {
       id,
       role,
       email,
       phone,
-      activationLinkId,
       isActive,
       isVerifiedEmail,
     };
@@ -411,7 +407,7 @@ export class AuthService {
       const rounds = convertToNumber(bcryptRounds);
       return await bcrypt.hash(password, rounds);
     } catch (error) {
-      this.logger.error({ method: 'hashPassword', error });
+      this.logger.error({ method: 'auth-hashPassword', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -420,7 +416,7 @@ export class AuthService {
     try {
       return await bcrypt.compare(password, hashedPassword);
     } catch (error) {
-      this.logger.error({ method: 'verifyPassword', error });
+      this.logger.error({ method: 'auth-verifyPassword', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
@@ -436,37 +432,25 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error({ method: 'updateFailedAttempts', error });
+      this.logger.error({ method: 'auth-updateFailedAttempts', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
 
-  async verifyEmail(activationLinkId: string) {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        activationLinkId,
-      },
-    });
-
-    if (!user) {
-      this.logger.error({
-        method: 'activateUser',
-        error: `User not found by activationLinkId: ${activationLinkId}`,
-      });
-      throw new NotFoundException(UNKNOWN_ERROR_TRY);
-    }
-
+  async toggleIsVerifiedEmail(userId: string) {
     try {
-      return await this.prisma.user.update({
+      const user = await this.prisma.user.update({
         where: {
-          id: user.id,
+          id: userId,
         },
         data: {
           isVerifiedEmail: true,
         },
       });
+
+      return { isVerifiedEmail: user.isVerifiedEmail };
     } catch (error) {
-      this.logger.error({ method: 'activateUser', error });
+      this.logger.error({ method: 'auth-toggleIsVerifiedEmail', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -483,7 +467,7 @@ export class AuthService {
         },
       });
     } catch (error) {
-      this.logger.error({ method: 'deactivateUser', error });
+      this.logger.error({ method: 'auth-deactivateUser', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }
@@ -500,7 +484,7 @@ export class AuthService {
       });
     } catch (error) {
       this.logger.error({
-        method: 'resetFailedAttempts',
+        method: 'auth-resetFailedAttempts',
         error,
       });
 
