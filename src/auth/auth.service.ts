@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
-import { Prisma, User } from '@prisma/client';
+import { CodeType, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
@@ -68,7 +68,7 @@ export class AuthService {
       // Generate verification code for email confirmation
       const verificationCodeEmail = await this.verificationCodeService.create(
         newUserId,
-        'EMAIL_CONFIRMATION',
+        CodeType.EMAIL_CONFIRMATION,
       );
 
       const tokens = await this.createTokensInTokenService(newUserId);
@@ -207,7 +207,7 @@ export class AuthService {
       // Generate verification code for email confirmation
       const verificationCodeEmail = await this.verificationCodeService.create(
         userId,
-        'EMAIL_CONFIRMATION',
+        CodeType.EMAIL_CONFIRMATION,
       );
 
       await this.client.emit('email_changed', {

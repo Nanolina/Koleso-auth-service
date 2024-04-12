@@ -12,6 +12,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CodeType } from '@prisma/client';
 import { Request, Response } from 'express';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
@@ -128,10 +129,9 @@ export class AuthController {
     await this.verificationCodeService.verify(dto.code, userId, codeType);
 
     switch (codeType) {
-      case 'EMAIL_CONFIRMATION':
+      case CodeType.EMAIL_CONFIRMATION:
         return await this.authService.toggleIsVerifiedEmail(userId);
-      case 'PHONE_CONFIRMATION':
-      // return await this.authService.toggleIsVerifiedPhone(userId);
+      case CodeType.PHONE_CONFIRMATION:
       default:
         return { isVerifiedEmail: false };
     }
@@ -209,5 +209,14 @@ export class AuthController {
     await this.setRefreshTokenCookie(res, tokens.refreshToken);
 
     return res.send({ user, token: tokens.accessToken });
+  }
+
+  @Get('/resend/:codeType')
+  @HttpCode(HttpStatus.OK)
+  async resendConfirmationCode(
+    @Req() req: Request,
+    @Param('codeType') codeType: CodeType,
+  ): Promise<void> {
+    await this.verificationCodeService.resend(req.user.id, codeType);
   }
 }
