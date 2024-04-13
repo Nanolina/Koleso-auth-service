@@ -14,11 +14,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { CodeType } from '@prisma/client';
 import { Request, Response } from 'express';
+import { CodeService } from '../code/code.service';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { Public } from '../common/decorators';
 import { MyLogger } from '../logger/my-logger.service';
 import { TokenService } from '../token/token.service';
-import { VerificationCodeService } from '../verification-code/verification-code.service';
 import { AuthService } from './auth.service';
 import {
   ChangeEmailDto,
@@ -37,7 +37,7 @@ export class AuthController {
     private authService: AuthService,
     private tokenService: TokenService,
     private configService: ConfigService,
-    private verificationCodeService: VerificationCodeService,
+    private codeService: CodeService,
     private readonly logger: MyLogger,
   ) {}
 
@@ -123,29 +123,20 @@ export class AuthController {
   async verifyConfirmationCode(
     @Req() req: Request,
     @Body() dto: VerifyCodeDto,
-  ): Promise<VerifyConfirmationCodeResponse> {
+  ): Promise<VerifyConfirmationCodeResponse | boolean> {
     const userId = req.user.id;
     const codeType = dto.codeType;
-    await this.verificationCodeService.verify(dto.code, userId, codeType);
+    await this.codeService.verify(dto.code, codeType, userId);
 
     switch (codeType) {
+      case CodeType.PASSWORD_RESET:
+        return true;
       case CodeType.EMAIL_CONFIRMATION:
-        return await this.authService.toggleIsVerifiedEmail(userId);
+        return await this.authService.switchOnVerifiedEmail(userId);
       case CodeType.PHONE_CONFIRMATION:
       default:
         return { isVerifiedEmail: false };
     }
-  }
-
-  @Public()
-  @Post('/verify-password-reset-code')
-  @HttpCode(HttpStatus.OK)
-  async verifyPasswordResetCode(@Body() dto: VerifyCodeDto): Promise<void> {
-    return await this.verificationCodeService.verify(
-      dto.code,
-      undefined,
-      'PASSWORD_RESET',
-    );
   }
 
   @Patch('/change-email')
@@ -187,9 +178,18 @@ export class AuthController {
   @Public()
   @Post('/password/recovery')
   @HttpCode(HttpStatus.OK)
-  async requestPasswordRecovery(@Body() dto: ChangeEmailDto): Promise<void> {
-    return await this.authService.requestPasswordRecovery({
+  async requestPasswordRecovery(
+    @Body() dto: ChangeEmailDto,
+    @Res() res: Response,
+  ): Promise<Response> {
+    const { tokens, user } = await this.authService.requestPasswordRecovery({
       email: dto.email,
+    });
+    await this.setRefreshTokenCookie(res, tokens.refreshToken);
+
+    return res.send({
+      user,
+      token: tokens.accessToken,
     });
   }
 
@@ -217,6 +217,6 @@ export class AuthController {
     @Req() req: Request,
     @Param('codeType') codeType: CodeType,
   ): Promise<void> {
-    await this.verificationCodeService.resend(req.user.id, codeType);
+    await this.codeService.resend(req.user.id, codeType);
   }
 }

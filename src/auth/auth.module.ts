@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
-import { VerificationCodeModule } from 'src/verification-code/verification-code.module';
+import { CodeModule } from 'src/code/code.module';
 import { LoggerModule } from '../logger/logger.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
@@ -14,7 +14,7 @@ import { AuthService } from './auth.service';
     ConfigModule,
     LoggerModule,
     TokenModule,
-    VerificationCodeModule,
+    CodeModule,
     ClientsModule.registerAsync([
       {
         name: 'AUTH_FANOUT_CLIENT',

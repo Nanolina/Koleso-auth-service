@@ -11,12 +11,12 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { CodeType, Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { CodeService } from '../code/code.service';
 import { UNKNOWN_ERROR, convertToNumber } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 import { TokenService } from '../token/token.service';
-import { VerificationCodeService } from '../verification-code/verification-code.service';
 import { UNKNOWN_ERROR_TRY } from './../common/consts';
 import {
   ChangeEmailDto,
@@ -34,7 +34,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private tokenService: TokenService,
-    private verificationCodeService: VerificationCodeService,
+    private codeService: CodeService,
     private configService: ConfigService,
     private rabbitMQService: RabbitMQService,
     private readonly logger: MyLogger,
@@ -64,19 +64,16 @@ export class AuthService {
       });
 
       const newUserId = newUser.id;
+      const codeType = CodeType.EMAIL_CONFIRMATION;
 
       // Generate verification code for email confirmation
-      const verificationCodeEmail = await this.verificationCodeService.create(
-        newUserId,
-        CodeType.EMAIL_CONFIRMATION,
-      );
+      const code = await this.codeService.create(newUserId, codeType);
 
       const tokens = await this.createTokensInTokenService(newUserId);
       const eventType: string = 'user_created';
 
       const userCreatedEventData = {
         email,
-        eventType,
         id: newUserId,
       };
 
@@ -85,7 +82,8 @@ export class AuthService {
         'fanout',
         eventType,
         {
-          verificationCodeEmail,
+          code,
+          codeType,
           ...userCreatedEventData,
         },
         exchange,
@@ -200,18 +198,17 @@ export class AuthService {
       });
 
       const userId = user.id;
+      const codeType = CodeType.EMAIL_CONFIRMATION;
       const data = {
         email,
       };
 
       // Generate verification code for email confirmation
-      const verificationCodeEmail = await this.verificationCodeService.create(
-        userId,
-        CodeType.EMAIL_CONFIRMATION,
-      );
+      const code = await this.codeService.create(userId, codeType);
 
       await this.client.emit('email_changed', {
-        verificationCodeEmail,
+        code,
+        codeType,
         id: userId,
         ...data,
       });
@@ -326,18 +323,17 @@ export class AuthService {
     }
 
     const userId = user.id;
+    const codeType = CodeType.PASSWORD_RESET;
 
-    // Generate verification code for reset password
-    const verificationCodeEmail = await this.verificationCodeService.create(
-      userId,
-      'PASSWORD_RESET',
-    );
+    // Generate code for reset password
+    const code = await this.codeService.create(userId, codeType);
 
-    // Create an event for notification-service to send the verification code
+    // Create an event for notification-service to send the code to reset password
     try {
       await this.client.emit('password_reset_requested', {
         email,
-        verificationCodeEmail,
+        code,
+        codeType,
         id: userId,
       });
 
@@ -345,11 +341,28 @@ export class AuthService {
         method: 'requestPasswordRecovery',
         log: `password_reset_requested event published with userId: ${userId}`,
       });
+
+      // Create new tokens
+      const tokens = await this.createTokensInTokenService(user.id);
+      const { role, id, phone, isActive, isVerifiedEmail } = user;
+
+      const userData: UserData = {
+        id,
+        role,
+        email,
+        phone,
+        isActive,
+        isVerifiedEmail,
+      };
+
+      return { tokens, user: userData };
     } catch (error) {
       this.logger.error({
         method: 'auth-requestPasswordRecovery (password_reset_requested event)',
         error,
       });
+
+      throw new InternalServerErrorException(UNKNOWN_ERROR_TRY);
     }
   }
 
@@ -437,7 +450,7 @@ export class AuthService {
     }
   }
 
-  async toggleIsVerifiedEmail(userId: string) {
+  async switchOnVerifiedEmail(userId: string) {
     try {
       const user = await this.prisma.user.update({
         where: {

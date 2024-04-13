@@ -9,20 +9,20 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid())
-  email             String             @unique
-  phone             String             @db.VarChar(20)
-  isActive          Boolean            @default(true)
-  deactivationDate  DateTime?
-  password          String
-  failedAttempts    Int                @default(0)
-  isVerifiedEmail   Boolean            @default(false)
-  isVerifiedPhone   Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @default(now())
-  role              RoleType
-  token             Token?
-  verificationCodes VerificationCode[]
+  id               String    @id @default(uuid())
+  email            String    @unique
+  phone            String    @db.VarChar(20)
+  isActive         Boolean   @default(true)
+  deactivationDate DateTime?
+  password         String
+  failedAttempts   Int       @default(0)
+  isVerifiedEmail  Boolean   @default(false)
+  isVerifiedPhone  Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now())
+  role             RoleType
+  codes            Code[]
+  token            Token?
 }
 
 model Token {
@@ -34,7 +34,7 @@ model Token {
   user      User     @relation(fields: [userId], references: [id])
 }
 
-model VerificationCode {
+model Code {
   id        String   @id @default(uuid())
   userId    String
   codeType  CodeType

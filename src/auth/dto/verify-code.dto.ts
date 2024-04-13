@@ -1,13 +1,13 @@
 import { CodeType } from '@prisma/client';
 import { IsDefined, Validate } from 'class-validator';
 import {
+  IsValidCodeConstraint,
   IsValidCodeTypeConstraint,
-  IsValidVerificationCodeConstraint,
 } from '../validators';
 
 export class VerifyCodeDto {
   @IsDefined()
-  @Validate(IsValidVerificationCodeConstraint)
+  @Validate(IsValidCodeConstraint)
   code: number;
 
   @IsDefined()

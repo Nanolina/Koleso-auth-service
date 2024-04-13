@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { LoggerModule } from '../logger/logger.module';
 import { PrismaService } from '../prisma/prisma.service';
-import { VerificationCodeService } from './verification-code.service';
+import { CodeService } from './code.service';
 
 @Module({
   imports: [
@@ -26,7 +26,7 @@ import { VerificationCodeService } from './verification-code.service';
       },
     ]),
   ],
-  providers: [VerificationCodeService, PrismaService],
-  exports: [VerificationCodeService],
+  providers: [CodeService, PrismaService],
+  exports: [CodeService],
 })
-export class VerificationCodeModule {}
+export class CodeModule {}

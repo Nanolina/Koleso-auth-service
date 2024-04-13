@@ -8,7 +8,7 @@ import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
-export class VerificationCodeService {
+export class CodeService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
@@ -25,12 +25,10 @@ export class VerificationCodeService {
     const code: number = this.generate();
 
     // Create a code with expiration date
-    const codeExpires = this.configService.get<string>(
-      'VERIFICATION_CODE_EXPIRES_IN',
-    );
+    const codeExpires = this.configService.get<string>('CODE_EXPIRES_IN');
     const codeExpirationDate = calculateEndDate(codeExpires);
 
-    await this.prisma.verificationCode.create({
+    await this.prisma.code.create({
       data: {
         userId,
         code,
@@ -43,27 +41,23 @@ export class VerificationCodeService {
   }
 
   async update(userId: string, codeType: CodeType): Promise<number> {
-    const verificationCodeFromDB = await this.prisma.verificationCode.findFirst(
-      {
-        where: {
-          userId,
-          codeType,
-        },
+    const codeFromDB = await this.prisma.code.findFirst({
+      where: {
+        userId,
+        codeType,
       },
-    );
+    });
 
     // Generate a new code
     const newCode: number = this.generate();
 
     // Create a code with expiration date
-    const codeExpires = this.configService.get<string>(
-      'VERIFICATION_CODE_EXPIRES_IN',
-    );
+    const codeExpires = this.configService.get<string>('CODE_EXPIRES_IN');
     const newCodeExpirationDate = calculateEndDate(codeExpires);
 
-    await this.prisma.verificationCode.update({
+    await this.prisma.code.update({
       where: {
-        id: verificationCodeFromDB.id,
+        id: codeFromDB.id,
       },
       data: {
         code: newCode,
@@ -76,28 +70,26 @@ export class VerificationCodeService {
 
   async verify(
     code: number,
-    userId: string | undefined,
     codeType: CodeType,
+    userId: string,
   ): Promise<void> {
-    await this.prisma.$transaction(async (prisma) => {
-      const codeFromDB = await prisma.verificationCode.findFirst({
-        where: {
-          userId,
-          code,
-          codeType,
-          expiresAt: {
-            gte: new Date(),
-          },
+    const codeFromDB = await this.prisma.code.findFirst({
+      where: {
+        userId,
+        code,
+        codeType,
+        expiresAt: {
+          gte: new Date(),
         },
-      });
-
-      if (!codeFromDB) {
-        throw new NotFoundException('Invalid code');
-      }
-
-      // Delete the code as it will no longer be needed
-      await this.delete(codeFromDB.id);
+      },
     });
+
+    if (!codeFromDB) {
+      throw new NotFoundException('Invalid code');
+    }
+
+    // Remove the codeType codes for the user as they are no longer needed
+    await this.deleteMany(userId, codeType);
   }
 
   async resend(userId: string, codeType: CodeType): Promise<void> {
@@ -107,7 +99,7 @@ export class VerificationCodeService {
       },
     });
 
-    const verificationCode = await this.update(userId, codeType);
+    const code = await this.update(userId, codeType);
     let routingKey;
     switch (codeType) {
       case CodeType.EMAIL_CONFIRMATION:
@@ -121,11 +113,10 @@ export class VerificationCodeService {
     }
 
     const data = {
+      code,
+      codeType,
       id: userId,
       email: user.email,
-      ...(codeType === CodeType.EMAIL_CONFIRMATION && {
-        verificationCodeEmail: verificationCode,
-      }),
     };
 
     await this.client.emit(routingKey, data);
@@ -135,16 +126,17 @@ export class VerificationCodeService {
     });
   }
 
-  async delete(codeId: string): Promise<void> {
+  async deleteMany(userId: string, codeType: CodeType): Promise<void> {
     try {
-      await this.prisma.verificationCode.delete({
+      await this.prisma.code.deleteMany({
         where: {
-          id: codeId,
+          userId,
+          codeType,
         },
       });
     } catch (error) {
       this.logger.error({
-        method: 'verification-code-delete',
+        method: 'code-delete',
         error,
       });
     }
