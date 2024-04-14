@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ClientProxy } from '@nestjs/microservices';
 import { CodeType } from '@prisma/client';
 import { randomInt } from 'crypto';
+import { EmailResponse } from '../auth';
 import { calculateEndDate } from '../common';
 import { MyLogger } from '../logger/my-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -55,11 +56,17 @@ export class CodeService {
     const codeExpires = this.configService.get<string>('CODE_EXPIRES_IN');
     const newCodeExpirationDate = calculateEndDate(codeExpires);
 
-    await this.prisma.code.update({
+    await this.prisma.code.upsert({
       where: {
-        id: codeFromDB.id,
+        id: codeFromDB?.id || 'f7f02db7-1706-4d04-ad05-ce68e40ccc50',
       },
-      data: {
+      create: {
+        codeType,
+        userId,
+        code: newCode,
+        expiresAt: newCodeExpirationDate,
+      },
+      update: {
         code: newCode,
         expiresAt: newCodeExpirationDate,
       },
@@ -92,13 +99,14 @@ export class CodeService {
     await this.deleteMany(userId, codeType);
   }
 
-  async resend(userId: string, codeType: CodeType): Promise<void> {
+  async resend(email: string, codeType: CodeType): Promise<EmailResponse> {
     const user = await this.prisma.user.findFirst({
       where: {
-        id: userId,
+        email,
       },
     });
 
+    const userId = user.id;
     const code = await this.update(userId, codeType);
     let routingKey;
     switch (codeType) {
@@ -127,6 +135,8 @@ export class CodeService {
       method: routingKey,
       log: `routingKey event published with id: ${userId}`,
     });
+
+    return { email };
   }
 
   async deleteMany(userId: string, codeType: CodeType): Promise<void> {

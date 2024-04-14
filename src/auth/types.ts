@@ -27,6 +27,6 @@ export type ChangeEmailResponse = {
   isVerifiedEmail: boolean;
 };
 
-export type VerifyConfirmationCodeResponse = {
-  isVerifiedEmail: boolean;
+export type EmailResponse = {
+  email: string;
 };

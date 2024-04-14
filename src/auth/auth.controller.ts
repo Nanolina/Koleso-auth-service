@@ -25,11 +25,12 @@ import {
   ChangePasswordDto,
   ChangePhoneDto,
   LoginDto,
+  ResendCodeDto,
   SetNewPasswordDto,
   SignupDto,
   VerifyCodeDto,
 } from './dto';
-import { ChangeEmailResponse, VerifyConfirmationCodeResponse } from './types';
+import { ChangeEmailResponse, EmailResponse } from './types';
 
 @Controller('auth')
 export class AuthController {
@@ -159,16 +160,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async requestPasswordRecovery(
     @Body() dto: ChangeEmailDto,
-    @Res() res: Response,
-  ): Promise<Response> {
-    const { tokens, user } = await this.authService.requestPasswordRecovery({
+  ): Promise<EmailResponse> {
+    return await this.authService.requestPasswordRecovery({
       email: dto.email,
-    });
-    await this.setRefreshTokenCookie(res, tokens.refreshToken);
-
-    return res.send({
-      user,
-      token: tokens.accessToken,
     });
   }
 
@@ -189,33 +183,49 @@ export class AuthController {
     return res.send({ user, token: tokens.accessToken });
   }
 
+  @Public()
   @Post('/codes/:codeType/verify')
   @HttpCode(HttpStatus.OK)
-  async verifyConfirmationCode(
-    @Req() req: Request,
+  async verifyCode(
     @Param('codeType') codeType: CodeType,
     @Body() dto: VerifyCodeDto,
-  ): Promise<VerifyConfirmationCodeResponse | boolean> {
-    const userId = req.user.id;
+    @Res() res: Response,
+  ): Promise<Response> {
+    const userFromDB = await this.authService.getUserByEmail(dto.email);
+    const userId = userFromDB.id;
     await this.codeService.verify(dto.code, codeType, userId);
+
+    const { tokens, user } = await this.authService.getAuthResponse(userFromDB);
 
     switch (codeType) {
       case CodeType.PASSWORD_RESET:
-        return true;
+        await this.setRefreshTokenCookie(res, tokens.refreshToken);
+        return res.send({ user, token: tokens.accessToken });
       case CodeType.EMAIL_CONFIRMATION:
-        return await this.authService.switchOnVerifiedEmail(userId);
+        const isVerifiedEmail =
+          await this.authService.switchOnVerifiedEmail(userId);
+        await this.setRefreshTokenCookie(res, tokens.refreshToken);
+
+        return res.send({
+          user: {
+            ...user,
+            isVerifiedEmail,
+          },
+          token: tokens.accessToken,
+        });
       case CodeType.PHONE_CONFIRMATION:
       default:
-        return { isVerifiedEmail: false };
+        return;
     }
   }
 
-  @Get('/codes/:codeType/resend')
+  @Public()
+  @Post('/codes/:codeType/resend')
   @HttpCode(HttpStatus.OK)
-  async resendConfirmationCode(
-    @Req() req: Request,
+  async resendCode(
     @Param('codeType') codeType: CodeType,
-  ): Promise<void> {
-    await this.codeService.resend(req.user.id, codeType);
+    @Body() dto: ResendCodeDto,
+  ): Promise<EmailResponse> {
+    return await this.codeService.resend(dto.email, codeType);
   }
 }

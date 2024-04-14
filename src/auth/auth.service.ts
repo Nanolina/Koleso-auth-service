@@ -27,7 +27,7 @@ import {
   SetNewPasswordServiceDto,
   SignupDto,
 } from './dto';
-import { AuthResponse, Tokens, UserData } from './types';
+import { AuthResponse, EmailResponse, Tokens, UserData } from './types';
 
 @Injectable()
 export class AuthService {
@@ -40,6 +40,33 @@ export class AuthService {
     private readonly logger: MyLogger,
     @Inject('AUTH_CLIENT') private readonly client: ClientProxy,
   ) {}
+
+  async getUserByEmail(email: string): Promise<User> {
+    return this.prisma.user.findFirst({
+      where: {
+        email,
+      },
+    });
+  }
+
+  async getAuthResponse(user: User): Promise<AuthResponse> {
+    // Create tokens
+    const tokens = await this.createTokensInTokenService(user.id);
+
+    // Get user data
+    const { id, role, email, phone, isActive, isVerifiedEmail } = user;
+
+    const userData: UserData = {
+      id,
+      role,
+      email,
+      phone,
+      isActive,
+      isVerifiedEmail,
+    };
+
+    return { tokens, user: userData };
+  }
 
   async signup(dto: SignupDto): Promise<AuthResponse> {
     // Get data from dto
@@ -66,25 +93,19 @@ export class AuthService {
       const newUserId = newUser.id;
       const codeType = CodeType.EMAIL_CONFIRMATION;
 
-      // Generate verification code for email confirmation
+      // Generate code to be e-mailed
       const code = await this.codeService.create(newUserId, codeType);
-
-      const tokens = await this.createTokensInTokenService(newUserId);
       const eventType: string = 'user_created';
-
-      const userCreatedEventData = {
-        email,
-        id: newUserId,
-      };
 
       const exchange = this.configService.get<string>('RABBITMQ_AUTH_EXCHANGE');
       await this.rabbitMQService.publishToExchange(
         'fanout',
         eventType,
         {
+          email,
           code,
           codeType,
-          ...userCreatedEventData,
+          id: newUserId,
         },
         exchange,
       );
@@ -93,16 +114,7 @@ export class AuthService {
         log: `user_created event published with id: ${newUserId}`,
       });
 
-      return {
-        tokens,
-        user: {
-          phone,
-          role,
-          isActive: newUser.isActive,
-          isVerifiedEmail: newUser.isVerifiedEmail,
-          ...userCreatedEventData,
-        },
-      };
+      return this.getAuthResponse(newUser);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -164,20 +176,7 @@ export class AuthService {
     // Reset all invalid attempts to 0 in case of a successful login
     await this.resetFailedAttempts(user.id);
 
-    // Create new tokens
-    const tokens = await this.createTokensInTokenService(user.id);
-    const { role, id, email, phone, isActive, isVerifiedEmail } = user;
-
-    const userData: UserData = {
-      id,
-      role,
-      email,
-      phone,
-      isActive,
-      isVerifiedEmail,
-    };
-
-    return { tokens, user: userData };
+    return this.getAuthResponse(user);
   }
 
   async logout(userId: string) {
@@ -203,7 +202,7 @@ export class AuthService {
         email,
       };
 
-      // Generate verification code for email confirmation
+      // Generate code to be e-mailed
       const code = await this.codeService.create(userId, codeType);
 
       await this.client.emit('email_changed', {
@@ -309,7 +308,7 @@ export class AuthService {
     }
   }
 
-  async requestPasswordRecovery(dto: ChangeEmailDto) {
+  async requestPasswordRecovery(dto: ChangeEmailDto): Promise<EmailResponse> {
     // Check user with incoming email
     const email = dto.email;
     const user = await this.prisma.user.findFirst({
@@ -342,20 +341,7 @@ export class AuthService {
         log: `password_reset_requested event published with userId: ${userId}`,
       });
 
-      // Create new tokens
-      const tokens = await this.createTokensInTokenService(user.id);
-      const { role, id, phone, isActive, isVerifiedEmail } = user;
-
-      const userData: UserData = {
-        id,
-        role,
-        email,
-        phone,
-        isActive,
-        isVerifiedEmail,
-      };
-
-      return { tokens, user: userData };
+      return { email };
     } catch (error) {
       this.logger.error({
         method: 'auth-requestPasswordRecovery (password_reset_requested event)',
@@ -461,9 +447,9 @@ export class AuthService {
         },
       });
 
-      return { isVerifiedEmail: user.isVerifiedEmail };
+      return user.isVerifiedEmail;
     } catch (error) {
-      this.logger.error({ method: 'auth-toggleIsVerifiedEmail', error });
+      this.logger.error({ method: 'auth-switchOnVerifiedEmail', error });
       throw new InternalServerErrorException(UNKNOWN_ERROR);
     }
   }

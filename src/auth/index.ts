@@ -1,1 +1,1 @@
-export { Tokens } from './types';
+export type { EmailResponse, Tokens } from './types';
