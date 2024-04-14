@@ -108,6 +108,9 @@ export class CodeService {
       case CodeType.PHONE_CONFIRMATION:
         routingKey = 'phone_confirmation_code_resended';
         break;
+      case CodeType.PASSWORD_RESET:
+        routingKey = 'password_reset_code_resended';
+        break;
       default:
         routingKey = '';
     }

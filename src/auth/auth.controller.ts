@@ -118,28 +118,7 @@ export class AuthController {
     });
   }
 
-  @Post('/verify-confirmation-code')
-  @HttpCode(HttpStatus.OK)
-  async verifyConfirmationCode(
-    @Req() req: Request,
-    @Body() dto: VerifyCodeDto,
-  ): Promise<VerifyConfirmationCodeResponse | boolean> {
-    const userId = req.user.id;
-    const codeType = dto.codeType;
-    await this.codeService.verify(dto.code, codeType, userId);
-
-    switch (codeType) {
-      case CodeType.PASSWORD_RESET:
-        return true;
-      case CodeType.EMAIL_CONFIRMATION:
-        return await this.authService.switchOnVerifiedEmail(userId);
-      case CodeType.PHONE_CONFIRMATION:
-      default:
-        return { isVerifiedEmail: false };
-    }
-  }
-
-  @Patch('/change-email')
+  @Patch('/users/email')
   @HttpCode(HttpStatus.OK)
   async changeEmail(
     @Req() req: Request,
@@ -151,7 +130,7 @@ export class AuthController {
     });
   }
 
-  @Patch('/change-phone')
+  @Patch('/users/phone')
   @HttpCode(HttpStatus.OK)
   async changePhone(
     @Req() req: Request,
@@ -163,7 +142,7 @@ export class AuthController {
     });
   }
 
-  @Patch('/change-password')
+  @Patch('/users/password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
     @Req() req: Request,
@@ -176,7 +155,7 @@ export class AuthController {
   }
 
   @Public()
-  @Post('/password/recovery')
+  @Post('/passwords/recovery')
   @HttpCode(HttpStatus.OK)
   async requestPasswordRecovery(
     @Body() dto: ChangeEmailDto,
@@ -193,16 +172,15 @@ export class AuthController {
     });
   }
 
-  @Public()
-  @Post('/password/set/:userId')
+  @Post('/passwords/set')
   @HttpCode(HttpStatus.OK)
   async setNewPassword(
     @Body() dto: SetNewPasswordDto,
-    @Param('userId') userId: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<Response> {
     const { tokens, user } = await this.authService.setNewPassword({
-      userId,
+      userId: req.user.id,
       ...dto,
     });
 
@@ -211,7 +189,28 @@ export class AuthController {
     return res.send({ user, token: tokens.accessToken });
   }
 
-  @Get('/resend/:codeType')
+  @Post('/codes/:codeType/verify')
+  @HttpCode(HttpStatus.OK)
+  async verifyConfirmationCode(
+    @Req() req: Request,
+    @Param('codeType') codeType: CodeType,
+    @Body() dto: VerifyCodeDto,
+  ): Promise<VerifyConfirmationCodeResponse | boolean> {
+    const userId = req.user.id;
+    await this.codeService.verify(dto.code, codeType, userId);
+
+    switch (codeType) {
+      case CodeType.PASSWORD_RESET:
+        return true;
+      case CodeType.EMAIL_CONFIRMATION:
+        return await this.authService.switchOnVerifiedEmail(userId);
+      case CodeType.PHONE_CONFIRMATION:
+      default:
+        return { isVerifiedEmail: false };
+    }
+  }
+
+  @Get('/codes/:codeType/resend')
   @HttpCode(HttpStatus.OK)
   async resendConfirmationCode(
     @Req() req: Request,
