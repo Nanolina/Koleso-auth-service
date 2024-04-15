@@ -81,7 +81,7 @@ export class AuthService {
     const hashedPassword = await this.hashPassword(password);
 
     try {
-      const newUser = await this.prisma.user.create({
+      const user = await this.prisma.user.create({
         data: {
           email,
           phone,
@@ -90,7 +90,7 @@ export class AuthService {
         },
       });
 
-      const newUserId = newUser.id;
+      const newUserId = user.id;
       const codeType = CodeType.EMAIL_CONFIRMATION;
 
       // Generate code to be e-mailed
@@ -110,11 +110,11 @@ export class AuthService {
         exchange,
       );
       this.logger.log({
-        method: 'signup',
+        method: 'auth-signup',
         log: `user_created event published with id: ${newUserId}`,
       });
 
-      return this.getAuthResponse(newUser);
+      return this.getAuthResponse(user);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -212,7 +212,7 @@ export class AuthService {
         ...data,
       });
       this.logger.log({
-        method: 'changeEmail',
+        method: 'auth-changeEmail',
         log: `email_changed event published with id: ${userId}`,
       });
 
@@ -325,7 +325,7 @@ export class AuthService {
     const codeType = CodeType.PASSWORD_RESET;
 
     // Generate code for reset password
-    const code = await this.codeService.create(userId, codeType);
+    const code = await this.codeService.update(userId, codeType);
 
     // Create an event for notification-service to send the code to reset password
     try {
@@ -337,7 +337,7 @@ export class AuthService {
       });
 
       this.logger.log({
-        method: 'requestPasswordRecovery',
+        method: 'auth-requestPasswordRecovery',
         log: `password_reset_requested event published with userId: ${userId}`,
       });
 
